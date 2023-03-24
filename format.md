@@ -67,7 +67,6 @@ struct<char> colors {
 }
 
 struct header {
-    hdr_info            header_info;
     char                header_version;
     compr               index_compression;
     compr               data_compression;
