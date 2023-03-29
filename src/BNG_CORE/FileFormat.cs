@@ -62,6 +62,7 @@
     }
 
     public class Layer {
+        public char[] magic = { 'L', 'A', 'Y', 'R' };
         public PixFmt pixel_format { get; set; }
         public Bits bits { get; set; }
         public LayerBlendMode blend_mode { get; set; }
@@ -77,12 +78,13 @@
     }
 
     public class Frame {
-        public byte version { get; set; }
+        public char[] magic = { 'F', 'R', 'M', 'E' };
         public ushort num_layers { get; set; }
         public ulong[]? layer_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Layer[]? layers { get; set; }
     }
     public class File {
+        public char[] magic = { 'B', 'N', 'G', '!' };
         public byte version { get; set; }
         public uint width { get; set; }
         public uint height { get; set; }
