@@ -10,3 +10,5 @@ Under development
 - Image data partitioning in tiles for files that don't fit in memory (NASA, hobby astronomy, etc.)
 - Compressed indexes
 - Compressed image data using predictors, pre-filters and entropy encoders (ZSTD, Brotli, LZMA, GZIP, Order0 Arithmetic)
+- Multi threaded encoding and decoding using tiles
+- Fast save and loa (depending on the compression used as well as image size, platform and processing power of the platform)
