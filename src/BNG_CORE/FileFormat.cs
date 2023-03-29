@@ -63,6 +63,10 @@
 
     public class Layer {
         public char[] magic = { 'L', 'A', 'Y', 'R' };
+        public byte name_length { get; set; }
+        public string name { get; set; } = "layer";
+        public ushort descr_length { get; set; }
+        public string descr { get; set; } = "";
         public PixFmt pixel_format { get; set; }
         public Bits bits { get; set; }
         public LayerBlendMode blend_mode { get; set; }
