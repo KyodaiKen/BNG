@@ -8,7 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\BNG_CORE\BNG_CORE.csproj" />
+    <Compile Remove="BNG_CORE\**" />
+    <EmbeddedResource Remove="BNG_CORE\**" />
+    <None Remove="BNG_CORE\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="BNG_CORE\BNG_CORE.csproj" />
   </ItemGroup>
 
 </Project>

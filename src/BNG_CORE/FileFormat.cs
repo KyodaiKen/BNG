@@ -1,4 +1,5 @@
 ﻿namespace BNG_CORE {
+    using MemoryPack;
 
     public enum PixFmt : byte {
         GREY = 0x00,
@@ -52,8 +53,8 @@
         LZMA = 0x95,
         ArithmeticOrder0 = 0xA0
     }
-
-    public class Tile {
+    [MemoryPackable]
+    public partial class Tile {
         public CompressionAlgorithm compression_algo { get; set; }
         public EntropyEncoding entropy_encoding { get; set; }
         public ushort width { get; set; }
@@ -61,7 +62,8 @@
         public byte[]? data { get; set; }
     }
 
-    public class Layer {
+    [MemoryPackable]
+    public partial class Layer {
         public char[] magic = { 'L', 'A', 'Y', 'R' };
         public byte name_length { get; set; }
         public string name { get; set; } = "layer";
@@ -81,14 +83,16 @@
         public Tile[][]? tiles { get; set; }
     }
 
-    public class Frame {
+    [MemoryPackable]
+    public partial class Frame {
         public char[] magic = { 'F', 'R', 'M', 'E' };
         public double display_time { get; set; } = 1/12; // Frame display time in seconds for animations
         public ushort num_layers { get; set; }
         public ulong[]? layer_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Layer[]? layers { get; set; }
     }
-    public class File {
+    [MemoryPackable]
+    public partial class File {
         public char[] magic = { 'B', 'N', 'G', '!' };
         public byte version { get; set; }
         public uint width { get; set; }
