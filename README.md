@@ -1,6 +1,8 @@
 # BNG
 
-Under development
+Better Network Graphics / Borg Network Graphics
+
+## Under development
 
 ## Supports:
 - Pixel formats: Gray, Alpha only, RGB, YCrCb, CMYK, RGBA, YCrCbA, CMYKA
