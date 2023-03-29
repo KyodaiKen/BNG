@@ -64,10 +64,7 @@
 
     [MemoryPackable]
     public partial class Layer {
-        public char[] magic = { 'L', 'A', 'Y', 'R' };
-        public byte name_length { get; set; }
         public string name { get; set; } = "layer";
-        public ushort descr_length { get; set; }
         public string descr { get; set; } = "";
         public PixFmt pixel_format { get; set; }
         public Bits bits { get; set; }
@@ -77,27 +74,21 @@
         public uint offset_y { get; set; }
         public uint width { get; set; }
         public uint height { get; set; }
-        public uint num_columns { get; set; }
-        public uint num_rows { get; set; }
-        public ulong[][]? tile_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
-        public Tile[][]? tiles { get; set; }
+        public ulong[,]? tile_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
+        public Tile[,]? tiles { get; set; }
     }
 
     [MemoryPackable]
     public partial class Frame {
-        public char[] magic = { 'F', 'R', 'M', 'E' };
         public double display_time { get; set; } = 1/12; // Frame display time in seconds for animations
-        public ushort num_layers { get; set; }
         public ulong[]? layer_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Layer[]? layers { get; set; }
     }
     [MemoryPackable]
     public partial class File {
-        public char[] magic = { 'B', 'N', 'G', '!' };
         public byte version { get; set; }
         public uint width { get; set; }
         public uint height { get; set; }
-        public uint num_frames { get; set; }
         public ulong[]? frame_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Frame[]? frames { get; set; }
     }
