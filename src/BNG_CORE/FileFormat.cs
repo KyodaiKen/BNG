@@ -17,7 +17,7 @@
         BPP_YCrCbPacked_9 = 0x30, //4:1:0
         BPP_YCrCbPacked_12 = 0x31, //4:2:0
         BPP_YCrCbPacked_16 = 0x32, //4:2:2
-        BPP_YCrCbPacked_32 = 0x33, //4:4:4
+        BPP_YCrCbPacked_24 = 0x33, //4:4:4
 
         //RGB Legacy
         BPP_RGB16_555 = 0xA0,
