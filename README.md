@@ -11,4 +11,4 @@ Under development
 - Compressed indexes
 - Compressed image data using predictors, pre-filters and entropy encoders (ZSTD, Brotli, LZMA, GZIP, Order0 Arithmetic)
 - Multi threaded encoding and decoding using tiles
-- Fast save and loa (depending on the compression used as well as image size, platform and processing power of the platform)
+- Fast save and load (depending on the compression used as well as image size, platform and processing power of the platform)
