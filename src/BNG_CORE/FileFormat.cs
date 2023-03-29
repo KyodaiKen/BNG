@@ -83,7 +83,7 @@
 
     public class Frame {
         public char[] magic = { 'F', 'R', 'M', 'E' };
-        public double display_time { get; set; } = 0.25; // Frame display time in seconds for animations
+        public double display_time { get; set; } = 1/12; // Frame display time in seconds for animations
         public ushort num_layers { get; set; }
         public ulong[]? layer_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Layer[]? layers { get; set; }
@@ -93,7 +93,7 @@
         public byte version { get; set; }
         public uint width { get; set; }
         public uint height { get; set; }
-        public ushort num_frames { get; set; }
+        public uint num_frames { get; set; }
         public ulong[]? frame_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
         public Frame[]? frames { get; set; }
     }
