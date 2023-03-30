@@ -1,19 +1,22 @@
 ﻿using BNG_CORE;
 using MemoryPack;
+using System.IO.Compression;
+using System.Text;
 
 BNG_CORE.File Test = new BNG_CORE.File();
 
 Test.version = 1;
 Test.width = 100;
 Test.height = 100;
+Test.frame_data_offsets = new ulong[1] { 0x0 };
 
 Frame myFrame = new Frame();
 myFrame.layer_data_offsets = new ulong[1] { 0x0 };
 
 
 Layer myLayer = new Layer();
-myLayer.name = "Test jusdwhfjkdsahlfkjasdfh asdf";
-myLayer.descr = "asdkljhasd jkfhasdjkfnasdhjkfnasdjk asdjkasdjkjk asdjkasdfh asdfhasdjkfh asdkjlfhaksjdfhasdfkjlsdjkf askdfjkahsdfkj asdjfkölasdf";
+myLayer.name = "Test Layer";
+myLayer.descr = "This is just a test";
 myLayer.pixel_format = PixFmt.RGB;
 myLayer.bits = Bits.BPC_BYTE;
 myLayer.offset_x = 0;
@@ -40,16 +43,18 @@ myFrame.layers = new Layer[1] { myLayer };
 Test.frames = new Frame[1] { myFrame };
 
 FileStream fs = new FileStream("test.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
-fs.Write(MemoryPackSerializer.Serialize(Test));
-fs.Close();
+var meta = MemoryPackSerializer.Serialize(Test);
+fs.Write(Encoding.UTF8.GetBytes("BNG!"));
+var zm = new MemoryStream();
+var z = new ZLibStream(zm, CompressionLevel.SmallestSize);
+z.Write(meta);
+z.Flush();
+zm.Flush();
 
-fs = new FileStream("test.bng", FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
-byte[] read = new byte[fs.Length];
-fs.Read(read);
-fs.Close();
-
-var deser = MemoryPackSerializer.Deserialize<BNG_CORE.File>(read);
-
-fs = new FileStream("test1.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
-fs.Write(MemoryPackSerializer.Serialize(deser));
+fs.Write(BitConverter.GetBytes((uint) zm.Length));
+byte[] zmeta = new byte[zm.Length];
+zm.Position = 0;
+zm.Read(zmeta);
+fs.Write(zmeta);
+fs.Write(Test.frames[0].layers[0].tiles[0, 0].data);
 fs.Close();

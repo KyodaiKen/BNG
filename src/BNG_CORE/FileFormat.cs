@@ -59,6 +59,7 @@
         public EntropyEncoding entropy_encoding { get; set; }
         public ushort width { get; set; }
         public ushort height { get; set; }
+        [MemoryPackIgnore]
         public byte[]? data { get; set; }
     }
 
