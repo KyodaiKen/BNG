@@ -3,46 +3,51 @@ using MemoryPack;
 using System.IO.Compression;
 using System.Text;
 
-BNG_CORE.File Test = new BNG_CORE.File();
+Header Test = new Header();
 
-Test.version = 1;
-Test.width = 100;
-Test.height = 100;
-Test.frame_data_offsets = new ulong[1] { 0x0 };
+//Test.Metadata = new MetaBlock[2] { new MetaBlock() { key = "internal_id", type = "number", value = "3457892345783489" }, new MetaBlock() { key = "test", type = "string", value = "a test" } };
+
+Test.Version = 1;
+Test.Width = 100;
+Test.Height = 100;
+Test.FrameDataOffsets = new ulong[1] { 0x0 };
 
 Frame myFrame = new Frame();
-myFrame.layer_data_offsets = new ulong[1] { 0x0 };
+myFrame.LayerDataOffsets = new ulong[1] { 0x0 };
+myFrame.ResolutionH = 100;
+myFrame.ResolutionV = 100;
 
 
 Layer myLayer = new Layer();
-myLayer.name = "Test Layer";
-myLayer.descr = "This is just a test";
-myLayer.pixel_format = PixFmt.RGB;
-myLayer.bits = Bits.BPC_BYTE;
-myLayer.offset_x = 0;
-myLayer.offset_y = 0;
-myLayer.width = 100;
-myLayer.height = 100;
-myLayer.blend_mode = LayerBlendMode.Normal;
-myLayer.tile_data_offsets = new ulong[1,1] { { 0x0 } };
+myLayer.Name = "Test Layer";
+myLayer.Description = "This is just a test";
+myLayer.PixelFormat = PixelFormat.RGB;
+myLayer.BitsPerChannel = BitsPerChannel.BPC_UInt8;
+myLayer.OffsetX = 0;
+myLayer.OffsetY = 0;
+myLayer.Width = 100;
+myLayer.Height = 100;
+myLayer.BlendMode = LayerBlendMode.Normal;
+myLayer.TileDataOffsets = new ulong[1,1] { { 0x0 } };
 
 Tile myTile = new Tile();
-myTile.width = 100;
-myTile.height = 100;
-myTile.compression_algo = CompressionAlgorithm.None;
-myTile.entropy_encoding = EntropyEncoding.None;
-myTile.data = new byte[myTile.width * myTile.height * 3];
+myTile.Width = (ushort)myLayer.Width;
+myTile.Height = (ushort)myLayer.Height;
+myTile.CompressionAlgo = CompressionAlgorithm.None;
+myTile.EntropyEncoding = EntropyEncoding.None;
+//var imgdata = new byte[myTile.Width * myTile.Height * 3];
 
-var rand = new Random();
-rand.NextBytes(myTile.data);
+//var rand = new Random();
+//rand.NextBytes(imgdata);
 
-myLayer.tiles = new Tile[1,1] { { myTile } };
+myLayer.Tiles = new Tile[1,1] { { myTile } };
 
 
-myFrame.layers = new Layer[1] { myLayer };
-Test.frames = new Frame[1] { myFrame };
+myFrame.Layers = new Layer[1] { myLayer };
+Test.Frames = new Frame[1] { myFrame };
 
 FileStream fs = new FileStream("test.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
+fs.SetLength(0);
 var meta = MemoryPackSerializer.Serialize(Test);
 fs.Write(Encoding.UTF8.GetBytes("BNG!"));
 var zm = new MemoryStream();
@@ -56,5 +61,5 @@ byte[] zmeta = new byte[zm.Length];
 zm.Position = 0;
 zm.Read(zmeta);
 fs.Write(zmeta);
-fs.Write(Test.frames[0].layers[0].tiles[0, 0].data);
+//fs.Write(imgdata);
 fs.Close();

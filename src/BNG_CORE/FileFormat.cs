@@ -1,37 +1,6 @@
 ﻿namespace BNG_CORE {
     using MemoryPack;
-
-    public enum PixFmt : byte {
-        GREY = 0x00,
-        GRAY = 0x00,
-        ALPHA_ONLY = 0x00,
-        RGB = 0x7F,
-        RGBA = 0x70,
-        YCbCr = 0xF0,
-        YCbCrA = 0xF7,
-        CMYK = 0xA0,
-        CMYKA = 0xA7
-    }
-
-    public enum Bits : byte {
-        //YCrCb
-        BPP_YCrCbPacked_9 = 0x30, //4:1:0
-        BPP_YCrCbPacked_12 = 0x31, //4:2:0
-        BPP_YCrCbPacked_16 = 0x32, //4:2:2
-        BPP_YCrCbPacked_24 = 0x33, //4:4:4
-
-        //RGB Legacy
-        BPP_RGB16_555 = 0xA0,
-        BPP_RGB16_565 = 0xA1,
-
-        //RGB(A), CMYK(A), YCrCbA, Greyscale, Alpha only
-        BPC_BYTE = 0xB0,
-        BPC_INT16LE = 0xB1,
-        BPC_INT16BE = 0xB2,
-        BPC_INT32LE = 0xB3,
-        BPC_IEEE32 = 0xB4,
-        BPC_IEEE64 = 0xB5
-    }
+    using System.Collections.Immutable;
 
     public enum LayerBlendMode : byte {
         Normal = 0x00,
@@ -39,6 +8,7 @@
         Multiply = 0x01,
         Divide = 0x02
     }
+
     public enum CompressionAlgorithm : byte {
         None = 0x00,
         LinePredictor = 0x80,
@@ -53,44 +23,141 @@
         LZMA = 0x95,
         ArithmeticOrder0 = 0xA0
     }
+
+    public enum PixelFormat : byte {
+        GRAY = 0x10,
+        RGB = 0x0B,
+        RGBA = 0xAB,
+        CMYK = 0x0C,
+        CMYKA = 0xAC,
+        YCrCb = 0x0F,
+        YCrCbA = 0xAF
+    }
+
+    public enum BitsPerChannel : byte {
+        BPC_UInt8 = 0xA0,
+        BPC_UInt16_LE = 0xA1,
+        BPC_UInt16_BE = 0xA2,
+        BPC_UInt32_LE = 0xA3,
+        BPC_UInt32_BE = 0xA4,
+        BPC_UInt64_LE = 0xA5,
+        BPC_UInt64_BE = 0xA6,
+        BPC_IEEE_FLOAT32 = 0xF1, // float
+        BPC_IEEE_FLOAT64 = 0xF2, // double
+
+        //YCrCb
+        BPP_YCrCbPacked_9 = 0x30, //4:1:0
+        BPP_YCrCbPacked_12 = 0x31, //4:2:0
+        BPP_YCrCbPacked_16 = 0x32, //4:2:2
+        BPP_YCrCbPacked_24 = 0x33, //4:4:4
+    }
+
+    public enum MetaBlockType : byte {
+        TypeString = 0x00,
+        TypeNumer = 0x01,
+        TypeBinary = 0x03
+    }
+
+    [MemoryPackable]
+    public partial class MetaBlock {
+        public string? Key { get; set; }
+        public MetaBlockType? Type { get; set; }
+        public byte[]? Value { get; set; }
+    }
+
     [MemoryPackable]
     public partial class Tile {
-        public CompressionAlgorithm compression_algo { get; set; }
-        public EntropyEncoding entropy_encoding { get; set; }
-        public ushort width { get; set; }
-        public ushort height { get; set; }
-        [MemoryPackIgnore]
-        public byte[]? data { get; set; }
+        public CompressionAlgorithm CompressionAlgo { get; set; }
+        public EntropyEncoding EntropyEncoding { get; set; }
+        public ushort Width { get; set; }
+        public ushort Height { get; set; }
     }
 
     [MemoryPackable]
     public partial class Layer {
-        public string name { get; set; } = "layer";
-        public string descr { get; set; } = "";
-        public PixFmt pixel_format { get; set; }
-        public Bits bits { get; set; }
-        public LayerBlendMode blend_mode { get; set; }
-        public double opacity { get; set; } = 1;
-        public uint offset_x { get; set; }
-        public uint offset_y { get; set; }
-        public uint width { get; set; }
-        public uint height { get; set; }
-        public ulong[,]? tile_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
-        public Tile[,]? tiles { get; set; }
+        public string Name { get; set; } = "layer";
+        public string Description { get; set; } = "";
+        public PixelFormat PixelFormat { get; set; }
+        public BitsPerChannel BitsPerChannel { get; set; }
+        public LayerBlendMode BlendMode { get; set; }
+        public double Opacity { get; set; } = 1;
+        public uint OffsetX { get; set; }
+        public uint OffsetY { get; set; }
+        public uint Width { get; set; }
+        public uint Height { get; set; }
+        public ulong[,]? TileDataOffsets { get; set; }
+        public Tile[,]? Tiles { get; set; }
     }
 
     [MemoryPackable]
     public partial class Frame {
-        public double display_time { get; set; } = 1/12; // Frame display time in seconds for animations
-        public ulong[]? layer_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
-        public Layer[]? layers { get; set; }
+        public double DisplayTime { get; set; } = 1/12; // Frame display time in seconds for animations
+        public double ResolutionH { get; set; }
+        public double ResolutionV { get; set; }
+        public ulong[]? LayerDataOffsets { get; set; }
+        public Layer[]? Layers { get; set; }
     }
     [MemoryPackable]
-    public partial class File {
-        public byte version { get; set; }
-        public uint width { get; set; }
-        public uint height { get; set; }
-        public ulong[]? frame_data_offsets { get; set; } //To be differential encoded and compressed using ZSTD
-        public Frame[]? frames { get; set; }
+    public partial class Header {
+        public byte Version { get; set; }
+        public uint Width { get; set; }
+        public uint Height { get; set; }
+        public MetaBlock[]? Metadata { get; set; }
+        public ulong[]? FrameDataOffsets { get; set; }
+        public Frame[]? Frames { get; set; }
+    }
+
+    public class ImageObject : IDisposable {
+        private Header Info;
+        private bool disposedValue;
+
+        public ImageObject() {
+            Info = new Header();
+        }
+        public ImageObject(Stream Input, double DisplayTime = 0, uint OffsetX = 0, uint OffsetY = 0) {
+            Info = new Header();
+            AddFrame(Input, DisplayTime, OffsetX, OffsetY);
+        }
+        public void AddFrame(Stream Input, double DisplayTime = 0, uint OffsetX = 0, uint OffsetY = 0) {
+            Info.Frames ??= new Frame[0];
+            Info.Frames.Append(new Frame() { DisplayTime = DisplayTime, Layers = null, LayerDataOffsets = null });
+            AddLayer(Info.Frames.LongLength, Input, OffsetX, OffsetY);
+        }
+
+        public void AddLayer(long FrameID, Stream Input, uint OffsetX = 0, uint OffsetY = 0) {
+            if (Info.Frames == null) throw new ArgumentNullException(nameof(Info.Frames));
+
+            Info.Frames[FrameID].Layers ??= new Layer[0];
+
+            Layer myNewLayer = new Layer();
+
+        }
+
+        #region IDisposable implementation
+        protected virtual void Dispose(bool disposing) {
+            if (!disposedValue) {
+                if (disposing) {
+                    // TODO: dispose managed state (managed objects)
+                }
+
+                // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+                // TODO: set large fields to null
+                disposedValue = true;
+            }
+        }
+
+        // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+        // ~ImageObject()
+        // {
+        //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        //     Dispose(disposing: false);
+        // }
+
+        public void Dispose() {
+            // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
     }
 }
