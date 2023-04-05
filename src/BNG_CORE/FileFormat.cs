@@ -107,14 +107,14 @@
         public Frame[]? Frames { get; set; }
     }
 
-    public class ImageObject : IDisposable {
+    public class Bitmap : IDisposable {
         private Header Info;
         private bool disposedValue;
 
-        public ImageObject() {
+        public Bitmap() {
             Info = new Header();
         }
-        public ImageObject(Stream Input, double DisplayTime = 0, uint OffsetX = 0, uint OffsetY = 0) {
+        public Bitmap(Stream Input, double DisplayTime = 0, uint OffsetX = 0, uint OffsetY = 0) {
             Info = new Header();
             AddFrame(Input, DisplayTime, OffsetX, OffsetY);
         }
@@ -159,5 +159,5 @@
             GC.SuppressFinalize(this);
         }
         #endregion
-    }
 }
+    }
