@@ -1,6 +1,6 @@
 ﻿using BNG_CORE;
 using MemoryPack;
-using System.IO.Compression;
+using MemoryPack.Compression;
 using System.Text;
 
 Header Test = new Header();
@@ -20,7 +20,7 @@ myFrame.ResolutionV = 100;
 
 Layer myLayer = new Layer();
 myLayer.Name = "Test Layer";
-myLayer.Description = "This is just a test";
+myLayer.Description = "This is only a test";
 myLayer.PixelFormat = PixelFormat.RGB;
 myLayer.BitsPerChannel = BitsPerChannel.BPC_UInt8;
 myLayer.OffsetX = 0;
@@ -48,18 +48,12 @@ Test.Frames = new Frame[1] { myFrame };
 
 FileStream fs = new FileStream("test.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 1024 * 1024, FileOptions.RandomAccess);
 fs.SetLength(0);
-var meta = MemoryPackSerializer.Serialize(Test);
+var Compressor = new BrotliCompressor(11, 24);
+MemoryPackSerializer.Serialize(Compressor, Test);
+var meta = Compressor.ToArray();
+Compressor.Dispose();
 fs.Write(Encoding.UTF8.GetBytes("BNG!"));
-var zm = new MemoryStream();
-var z = new ZLibStream(zm, CompressionLevel.SmallestSize);
-z.Write(meta);
-z.Flush();
-zm.Flush();
-
-fs.Write(BitConverter.GetBytes((uint) zm.Length));
-byte[] zmeta = new byte[zm.Length];
-zm.Position = 0;
-zm.Read(zmeta);
-fs.Write(zmeta);
+fs.Write(BitConverter.GetBytes((uint)meta.Length));
+fs.Write(meta);
 //fs.Write(imgdata);
 fs.Close();
