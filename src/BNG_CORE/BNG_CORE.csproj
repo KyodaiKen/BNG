@@ -7,12 +7,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="JpegLibrary" Version="0.4.32" />
-    <PackageReference Include="libpng-sharp" Version="0.1.18" />
+    <PackageReference Include="EasyCompressor.LZMA" Version="1.4.0" />
     <PackageReference Include="MemoryPack" Version="1.9.13" />
-    <PackageReference Include="SharpEXR" Version="1.0.0.19" />
-    <PackageReference Include="TiffLibrary" Version="0.6.65" />
-    <PackageReference Include="ZstdSharp.Port" Version="0.7.0" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.7.1" />
   </ItemGroup>
 
 </Project>
