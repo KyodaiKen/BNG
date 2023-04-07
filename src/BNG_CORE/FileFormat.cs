@@ -2,6 +2,7 @@
     using EasyCompressor;
     using MemoryPack;
     using System;
+    using System.ComponentModel;
     using System.IO.Compression;
     using System.Text;
     using static System.Runtime.InteropServices.JavaScript.JSType;
@@ -140,6 +141,9 @@
         private Header Info;
         private bool disposedValue;
 
+        public delegate void dgProgressChanged(double progress);
+        public dgProgressChanged ProgressChangedEvent { get; set; }
+
         public Bitmap() {
             Info = new Header();
             Info.Frames = new List<Frame>();
@@ -188,20 +192,23 @@
                     Stream InputStream = new FileStream(Info.Frames[FrameID].Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x100000, FileOptions.RandomAccess);
                     Info.Frames[FrameID].LayerDataOffsets[LayerID] = (ulong)OutputStream.Position;
 
-                    for (uint x = 0; x < numTilesX; x++) {
-                        for (uint y = 0; y < numTilesY; y++) {
+                    for (uint y = 0; y < numTilesY; y++) {
+                        for (uint x = 0; x < numTilesX; x++) {
+
                             var corrTileSize = CalculateTileDimensionForCoordinate((Info.Frames[FrameID].Layers[LayerID].Width, Info.Frames[FrameID].Layers[LayerID].Height), tileSize, (x, y));
                             Info.Frames[FrameID].Layers[LayerID].TileDimensions[x, y] = corrTileSize;
                             
-
+                         
                             byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
                             MemoryStream iBuff = new MemoryStream();
                             byte[] cBuff = Array.Empty<byte>();
+                            long inputOffset = 0;
                             for (int line = 0; line < corrTileSize.h; line++) {
-                                long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
+                                inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                                 InputStream.Seek(inputOffset, SeekOrigin.Begin);
                                 InputStream.Read(lineBuff);
                                 iBuff.Write(lineBuff);
+
                             }
 
                             Info.Frames[FrameID].Layers[LayerID].TileDataOffsets[x, y] = (ulong)OutputStream.Position;
@@ -209,11 +216,11 @@
                             switch (Info.Frames[FrameID].Layers[LayerID].Compression) {
                                 case Compression.Brotli:
                                     BrotliCompressor compressor = new BrotliCompressor(null, (CompressionLevel)Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
-                                    cBuff = compressor.Compress(iBuff);
+                                    cBuff = compressor.Compress(iBuff.ToArray());
                                     break;
                                 case Compression.GZIP:
                                     GZipCompressor gZipCompressor = new GZipCompressor(null, (CompressionLevel)Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
-                                    cBuff =  gZipCompressor.Compress(iBuff);
+                                    cBuff =  gZipCompressor.Compress(iBuff.ToArray());
                                     break;
                                 case Compression.ZSTD:
                                     ZstdSharp.Compressor zstdCompressor = new ZstdSharp.Compressor(Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
@@ -221,7 +228,7 @@
                                     break;
                                 case Compression.LZMA:
                                     LZMACompressor lzmaCompressor = new LZMACompressor();
-                                    cBuff = lzmaCompressor.Compress(iBuff);
+                                    cBuff = lzmaCompressor.Compress(iBuff.ToArray());
                                     break;
                                 case Compression.ArithmeticOrder0:
                                     Compressors.Arithmetic.AbstractModel arithModelOder0Coder = new Compressors.Arithmetic.ModelOrder0();
@@ -236,9 +243,9 @@
                                     cBuff = iBuff.ToArray();
                                     break;
                             }
-
                             OutputStream.Write(cBuff);
                         }
+                        ProgressChangedEvent?.Invoke((double)InputStream.Position / InputStream.Length * 100.0);
                     }
                 }
             }
