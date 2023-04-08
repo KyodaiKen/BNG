@@ -6,9 +6,9 @@ Bitmap test = new Bitmap("N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bian
   , SourcePixelFormat           = PixelFormat.RGB
   , SourceBitsPerChannel        = BitsPerChannel.BPC_UInt8
   , Resolution                  = (72, 72) //DPI
-  , CompressionPreFilter        = CompressionPreFilter.None
-  , Compression                 = Compression.Brotli
-  , CompressionLevel            = 2
+  , CompressionPreFilter        = CompressionPreFilter.Up
+  , Compression                 = Compression.ZSTD
+  , CompressionLevel            = 11
   , CompressionWordSize         = 24
 });
 
@@ -19,7 +19,7 @@ void pChanged(double progress) {
 
 test.ProgressChangedEvent += pChanged;
 
-Stream outFile = new FileStream("N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+Stream outFile = new FileStream("N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.bng", FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
 test.WriteBitmapFile(ref outFile);
 outFile.Close();
 outFile.Dispose();

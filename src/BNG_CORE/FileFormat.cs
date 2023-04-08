@@ -16,8 +16,11 @@
 
     public enum CompressionPreFilter : byte {
         None = 0x00,
-        LinePredictor = 0x80,
-        Predictor3D = 0x85
+        Sub = 0x10,
+        Up = 0x20,
+        Average = 0x30,
+        Paeth = 0x40,
+        All = 0xFF
     }
 
     public enum Compression : byte {
@@ -189,7 +192,7 @@
                     var numTilesY = Info.Frames[FrameID].Layers[LayerID].TileDimensions.GetLongLength(1);
                     var tileSize = CalculateTileDimension(Info.Frames[FrameID].Layers[LayerID].PixelFormat, Info.Frames[FrameID].Layers[LayerID].BitsPerChannel);
                     long bytesWritten = 0;
-                    Stream InputStream = new FileStream(Info.Frames[FrameID].Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x100000, FileOptions.RandomAccess);
+                    Stream InputStream = new FileStream(Info.Frames[FrameID].Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
                     Info.Frames[FrameID].LayerDataOffsets[LayerID] = (ulong)OutputStream.Position;
 
                     for (uint y = 0; y < numTilesY; y++) {
@@ -200,14 +203,57 @@
                             
                          
                             byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                            byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                            Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                             MemoryStream iBuff = new MemoryStream();
                             byte[] cBuff = Array.Empty<byte>();
                             long inputOffset = 0;
+
                             for (int line = 0; line < corrTileSize.h; line++) {
                                 inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                                 InputStream.Seek(inputOffset, SeekOrigin.Begin);
                                 InputStream.Read(lineBuff);
-                                iBuff.Write(lineBuff);
+                                switch (Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter) {
+                                    case CompressionPreFilter.Paeth:
+                                        byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                                        Filters.Paeth paethFilter = new Filters.Paeth();
+                                        for (long col = 0; col < lineBuff.LongLength; col++) {
+                                            paethLineBuff[col] = paethFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                                        }
+                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                        iBuff.Write(paethLineBuff);
+                                        break;
+                                    case CompressionPreFilter.Sub:
+                                        byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                                        Filters.Sub subFilter = new Filters.Sub();
+                                        for (long col = 0; col < lineBuff.LongLength; col++) {
+                                            subLineBuff[col] = subFilter.Filter(ref lineBuff, col, BytesPerPixel);
+                                        }
+                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                        iBuff.Write(subLineBuff);
+                                        break;
+                                    case CompressionPreFilter.Up:
+                                        byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                                        Filters.Up upFilter = new Filters.Up();
+                                        for (long col = 0; col < lineBuff.LongLength; col++) {
+                                            upLineBuff[col] = upFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                                        }
+                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                        iBuff.Write(upLineBuff);
+                                        break;
+                                    case CompressionPreFilter.Average:
+                                        byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                                        Filters.Average avgFilter = new Filters.Average();
+                                        for (long col = 0; col < lineBuff.LongLength; col++) {
+                                            avgLineBuff[col] = avgFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                                        }
+                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                        iBuff.Write(avgLineBuff);
+                                        break;
+                                    default:
+                                        iBuff.Write(lineBuff);
+                                        break;
+                                }
                             }
 
                             bytesWritten += lineBuff.LongLength * corrTileSize.h;
