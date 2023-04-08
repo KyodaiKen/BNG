@@ -188,7 +188,7 @@
                     var numTilesX = Info.Frames[FrameID].Layers[LayerID].TileDimensions.GetLongLength(0);
                     var numTilesY = Info.Frames[FrameID].Layers[LayerID].TileDimensions.GetLongLength(1);
                     var tileSize = CalculateTileDimension(Info.Frames[FrameID].Layers[LayerID].PixelFormat, Info.Frames[FrameID].Layers[LayerID].BitsPerChannel);
-
+                    long bytesWritten = 0;
                     Stream InputStream = new FileStream(Info.Frames[FrameID].Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x100000, FileOptions.RandomAccess);
                     Info.Frames[FrameID].LayerDataOffsets[LayerID] = (ulong)OutputStream.Position;
 
@@ -208,8 +208,10 @@
                                 InputStream.Seek(inputOffset, SeekOrigin.Begin);
                                 InputStream.Read(lineBuff);
                                 iBuff.Write(lineBuff);
-
                             }
+
+                            bytesWritten += lineBuff.LongLength * corrTileSize.h;
+                            ProgressChangedEvent?.Invoke((double)bytesWritten / InputStream.Length * 100.0);
 
                             Info.Frames[FrameID].Layers[LayerID].TileDataOffsets[x, y] = (ulong)OutputStream.Position;
 
@@ -245,7 +247,6 @@
                             }
                             OutputStream.Write(cBuff);
                         }
-                        ProgressChangedEvent?.Invoke((double)InputStream.Position / InputStream.Length * 100.0);
                     }
                 }
             }

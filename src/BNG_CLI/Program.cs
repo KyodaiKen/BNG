@@ -7,8 +7,8 @@ Bitmap test = new Bitmap("N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bian
   , SourceBitsPerChannel        = BitsPerChannel.BPC_UInt8
   , Resolution                  = (72, 72) //DPI
   , CompressionPreFilter        = CompressionPreFilter.None
-  , Compression                 = Compression.ZSTD
-  , CompressionLevel            = 11
+  , Compression                 = Compression.Brotli
+  , CompressionLevel            = 2
   , CompressionWordSize         = 24
 });
 
