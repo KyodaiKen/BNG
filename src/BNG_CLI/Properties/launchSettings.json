@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BNG_CLI": {
+      "commandName": "Project",
+      "commandLineArgs": "-t Encode -i \"N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.raw\" -src-width 32000 -src-height 13956 -o \"N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.bng\""
+    }
+  }
+}
