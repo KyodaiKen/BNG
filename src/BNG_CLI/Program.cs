@@ -1,6 +1,7 @@
 ﻿using BNG_CORE;
 using CommandLine;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace BNG_CLI {
     public enum Task {
@@ -8,16 +9,16 @@ namespace BNG_CLI {
         Decode
     }
     public class Options {
-        [Option('t', "task", Required = true, HelpText = "Task to be done")]
+        [Option('t', "task", Required = true, HelpText = "Task to be done: Encode, Decode")]
         public Task Task { get; set; } = Task.Encode;
         [Option('i', "input", Required = true, HelpText = "Input file to be processed (RAW Bitmap only)")]
         public string InputFile { get; set; } = "";
         [Option('o', "output", Required = true, HelpText = "Output file to be written to")]
         public string OutputFile { get; set; } = "";
-        [Option("src-width", Required = true, HelpText = "Source width")]
-        public uint SrcWidth { get; set; }
-        [Option("src-height", Required = true, HelpText = "Source height")]
-        public uint SrcHeight { get; set; }
+        [Option('w', "src-width", Required = false, HelpText = "Source width", Default = (uint)1920)]
+        public uint SrcWidth { get; set; } = 0;
+        [Option('h', "src-height", Required = false, HelpText = "Source height", Default = (uint)1080)]
+        public uint SrcHeight { get; set; } = 0;
         [Option('p', "src-pix-fmt", Required = false, HelpText = "Source pixel format", Default = PixelFormat.RGB)]
         public PixelFormat PixFmt { get; set; } = PixelFormat.RGB;
         [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel", Default = BitsPerChannel.BPC_UInt8)]
@@ -45,28 +46,41 @@ namespace BNG_CLI {
 
             var parms = cmdParser.ParseArguments<Options>(args);
             parms.WithParsed(o => {
-                 Bitmap BNG = new Bitmap(o.InputFile, new RAWImportParameters() {
-                   SourceDimensions = (o.SrcWidth, o.SrcHeight)
-                 , SourcePixelFormat = o.PixFmt
-                 , SourceBitsPerChannel = o.BPC
-                 , Resolution = (o.SrcResolutionH, o.SrcResolutionV)
-                 , CompressionPreFilter = o.CompressionFilter
-                 , Compression = o.Compression
-                 , CompressionLevel = o.CompressionLevel
-                 });
+                switch (o.Task) {
+                    case Task.Encode:
+                        Bitmap BNG = new Bitmap(o.InputFile, new RAWImportParameters() {
+                            SourceDimensions = (o.SrcWidth, o.SrcHeight)
+                        , SourcePixelFormat = o.PixFmt
+                        , SourceBitsPerChannel = o.BPC
+                        , Resolution = (o.SrcResolutionH, o.SrcResolutionV)
+                        , CompressionPreFilter = o.CompressionFilter
+                        , Compression = o.Compression
+                        , CompressionLevel = o.CompressionLevel
+                        });
 
 
-                void pChanged(double progress) {
-                    Console.CursorLeft = 0;
-                    Console.Write(string.Format("{0:0.00}%", progress));
+                        void pChanged(double progress) {
+                            Console.CursorLeft = 0;
+                            Console.Write(string.Format("{0:0.00}%", progress));
+                        }
+
+                        BNG.ProgressChangedEvent += pChanged;
+
+                        Stream outFile = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
+                        BNG.WriteBitmapFile(ref outFile);
+                        outFile.Close();
+                        outFile.Dispose();
+                        break;
+                    case Task.Decode:
+                        Bitmap BNGToDecode = new Bitmap();
+                        Stream inFile = new FileStream(o.InputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 0xFF00000);
+                        StringBuilder log;
+                        BNGToDecode.LoadBNG(ref inFile, out log);
+                        Console.WriteLine(log.ToString());
+                        inFile.Close();
+                        inFile.Dispose();
+                        break;
                 }
-
-                BNG.ProgressChangedEvent += pChanged;
-
-                Stream outFile = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
-                BNG.WriteBitmapFile(ref outFile);
-                outFile.Close();
-                outFile.Dispose();
             });
 
             if (parms.Errors.Count() > 0) Console.Write(Help);
