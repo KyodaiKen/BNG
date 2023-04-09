@@ -105,6 +105,8 @@
         public List<DataBlock>? ExtraData { get; set; }
         public ulong[,] TileDataOffsets { get; set; }
         public (uint w, uint h) BaseTileDimension { get; set; }
+        [MemoryPackIgnore]
+        public (uint w, uint h)[,] TileDimensions { get; set; }
     }
 
     [MemoryPackable]
@@ -276,6 +278,7 @@
 
                     var txl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(0);
                     var tyl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(1);
+                    Info.Frames[frame].Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl]; 
                     for (uint tileX = 0; tileX < txl; tileX++ ) {
                         for (uint tileY = 0; tileY < tyl; tileY++) {
                             string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
@@ -291,6 +294,7 @@
                                 tleSzPacked = Info.Frames[frame].Layers[layer].TileDataOffsets[tileX + 1, tileY] - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
                             }
                             var corrTileSize = CalculateTileDimensionForCoordinate((Info.Frames[frame].Layers[layer].Width, Info.Frames[frame].Layers[layer].Height), (Info.Frames[frame].Layers[layer].BaseTileDimension.w, Info.Frames[frame].Layers[layer].BaseTileDimension.h), (tileX, tileY));
+                            Info.Frames[frame].Layers[layer].TileDimensions[tileY, tileY] = corrTileSize;
                             tleWzUnPacked = (ulong)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(Info.Frames[frame].Layers[layer].PixelFormat, Info.Frames[frame].Layers[layer].BitsPerChannel) / 8);
                             log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
                             log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
