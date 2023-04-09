@@ -220,19 +220,19 @@
             log.AppendLine(string.Format("BNG Version..........: {0}", Info.Version));
             log.AppendLine(string.Format("Width................: {0}", Info.Width));
             log.AppendLine(string.Format("Height...............: {0}", Info.Height));
-            log.AppendLine(string.Format("Number of frames.....: {0}, listing only the first two", Info.Frames.Count));
+            log.AppendLine(string.Format("Number of frames.....: {0}", Info.Frames.Count));
             log.AppendLine();
-            for (int frame = 0; frame < (Info.Frames.Count > 1 ? 2 : Info.Frames.Count); frame++) {
+            for (int frame = 0; frame < Info.Frames.Count; frame++) {
                 string frmNum = string.Format("Frame {0}", frame) + " ";
                 log.Append(frmNum);
                 log.AppendLine(new string('=', 40 - frmNum.Length));
                 log.AppendLine(string.Format("Display time (sec)...: {0}", Info.Frames[frame].DisplayTime));
                 log.AppendLine(string.Format("Horizontal resolution: {0}", Info.Frames[frame].ResolutionH));
                 log.AppendLine(string.Format("Vertical resolution..: {0}", Info.Frames[frame].ResolutionV));
-                log.AppendLine(string.Format("Number of layers.....: {0}, listing only the first two", Info.Frames[frame].Layers.Count));
+                log.AppendLine(string.Format("Number of layers.....: {0}", Info.Frames[frame].Layers.Count));
 
-                for (int layer = 0; layer < (Info.Frames[frame].Layers.Count > 1 ? 2 : Info.Frames[frame].Layers.Count);  layer++) {
-                    string lyrNum = string.Format("Layer {0}", frame) + " ";
+                for (int layer = 0; layer < Info.Frames[frame].Layers.Count;  layer++) {
+                    string lyrNum = string.Format("Layer {0}", layer) + " ";
                     log.Append(lyrNum);
                     log.AppendLine(new string('-', 40 - lyrNum.Length));
                     log.AppendLine(string.Format("Layer name...........: {0}", Info.Frames[frame].Layers[layer].Name));
@@ -249,7 +249,33 @@
                     log.AppendLine(string.Format("Base tile dimension W: {0}", Info.Frames[frame].Layers[layer].BaseTileDimension.w));
                     log.AppendLine(string.Format("Base tile dimension H: {0}", Info.Frames[frame].Layers[layer].BaseTileDimension.h));
                     log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= Info.Frames[frame].Layers.Count ? (ulong)InputStream.Length - (ulong)binaryHeader.LongLength : Info.Frames[frame].LayerDataOffsets[layer+1]) - Info.Frames[frame].LayerDataOffsets[layer]));
+                    log.AppendLine(string.Format("Uncompressed size (\"): {0}", Info.Frames[frame].Layers[layer].Width * Info.Frames[frame].Layers[layer].Height * CalculateBitsPerPixel(Info.Frames[frame].Layers[layer].PixelFormat, Info.Frames[frame].Layers[layer].BitsPerChannel) / 8));
                     log.AppendLine(string.Format("Number of tiles......: {0}", Info.Frames[frame].Layers[layer].TileDataOffsets.LongLength));
+
+                    var txl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(0);
+                    var tyl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(1);
+                    for (uint tileX = 0; tileX < txl; tileX++ ) {
+                        for (uint tileY = 0; tileY < tyl; tileY++) {
+                            string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
+                            log.Append(tleNum);
+                            log.AppendLine(new string('-', 40 - tleNum.Length));
+                            ulong tleWzUnPacked = 0;
+                            ulong tleSzPacked = 0;
+                            if (tileX == txl-1 && tileY != tyl-1) {
+                                tleSzPacked = Info.Frames[frame].Layers[layer].TileDataOffsets[0, tileY + 1] - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
+                            } else if (tileX == txl-1 && tileY == tyl-1) {
+                                tleSzPacked = (ulong)InputStream.Length - (ulong)binaryHeader.LongLength - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
+                            } else {
+                                tleSzPacked = Info.Frames[frame].Layers[layer].TileDataOffsets[tileX + 1, tileY] - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
+                            }
+                            var corrTileSize = CalculateTileDimensionForCoordinate((Info.Frames[frame].Layers[layer].Width, Info.Frames[frame].Layers[layer].Height), (Info.Frames[frame].Layers[layer].BaseTileDimension.w, Info.Frames[frame].Layers[layer].BaseTileDimension.h), (tileX, tileY));
+                            tleWzUnPacked = (ulong)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(Info.Frames[frame].Layers[layer].PixelFormat, Info.Frames[frame].Layers[layer].BitsPerChannel) / 8);
+                            log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
+                            log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
+                            log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
+                            log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
+                        }
+                    }
                 }
             }
 
@@ -470,107 +496,7 @@
             newLayer.Opacity = ImportParameters.Opacity;
             newLayer.BlendMode = ImportParameters.BlendMode;
 
-            switch (newLayer.BitsPerChannel) {
-                case BitsPerChannel.BPC_UInt8:
-                    switch (newLayer.PixelFormat) {
-                        case PixelFormat.GRAY:
-                            newLayer.BitsPerPixel = 8;
-                            break;
-                        case PixelFormat.GRAYA:
-                            newLayer.BitsPerPixel = 16;
-                            break;
-                        case PixelFormat.RGB:
-                        case PixelFormat.YCrCb:
-                            newLayer.BitsPerPixel = 24;
-                            break;
-                        case PixelFormat.RGBA:
-                        case PixelFormat.CMYK:
-                            newLayer.BitsPerPixel = 32;
-                            break;
-                        case PixelFormat.CMYKA:
-                            newLayer.BitsPerPixel = 40;
-                            break;
-                    }
-                    break;
-                case BitsPerChannel.BPC_UInt16_BE:
-                case BitsPerChannel.BPC_UInt16_LE:
-                case BitsPerChannel.BPP_YCrCbPacked_16:
-                    switch (newLayer.PixelFormat) {
-                        case PixelFormat.GRAY:
-                            newLayer.BitsPerPixel = 16;
-                            break;
-                        case PixelFormat.GRAYA:
-                            newLayer.BitsPerPixel = 32;
-                            break;
-                        case PixelFormat.RGB:
-                        case PixelFormat.YCrCb:
-                            newLayer.BitsPerPixel = 48;
-                            break;
-                        case PixelFormat.RGBA:
-                        case PixelFormat.CMYK:
-                            newLayer.BitsPerPixel = 64;
-                            break;
-                        case PixelFormat.CMYKA:
-                            newLayer.BitsPerPixel = 80;
-                            break;
-                    }
-                    break;
-                case BitsPerChannel.BPP_YCrCbPacked_24:
-                    switch (newLayer.PixelFormat) {
-                        case PixelFormat.YCrCb:
-                            newLayer.BitsPerPixel = 24;
-                            break;
-                        default:
-                            throw new InvalidDataException("BitsPerChannel.BPP_YCrCbPacked_24 only works in PixelFormat.YCrCb mode");
-                    }
-                    break;
-                case BitsPerChannel.BPC_UInt32_LE:
-                case BitsPerChannel.BPC_UInt32_BE:
-                case BitsPerChannel.BPC_IEEE_FLOAT32:
-                    switch (newLayer.PixelFormat) {
-                        case PixelFormat.GRAY:
-                            newLayer.BitsPerPixel = 32;
-                            break;
-                        case PixelFormat.GRAYA:
-                            newLayer.BitsPerPixel = 64;
-                            break;
-                        case PixelFormat.RGB:
-                        case PixelFormat.YCrCb:
-                            newLayer.BitsPerPixel = 96;
-                            break;
-                        case PixelFormat.RGBA:
-                        case PixelFormat.CMYK:
-                            newLayer.BitsPerPixel = 128;
-                            break;
-                        case PixelFormat.CMYKA:
-                            newLayer.BitsPerPixel = 160;
-                            break;
-                    }
-                    break;
-                case BitsPerChannel.BPC_UInt64_LE:
-                case BitsPerChannel.BPC_UInt64_BE:
-                case BitsPerChannel.BPC_IEEE_FLOAT64:
-                    switch (newLayer.PixelFormat) {
-                        case PixelFormat.GRAY:
-                            newLayer.BitsPerPixel = 64;
-                            break;
-                        case PixelFormat.GRAYA:
-                            newLayer.BitsPerPixel = 128;
-                            break;
-                        case PixelFormat.RGB:
-                        case PixelFormat.YCrCb:
-                            newLayer.BitsPerPixel = 192;
-                            break;
-                        case PixelFormat.RGBA:
-                        case PixelFormat.CMYK:
-                            newLayer.BitsPerPixel = 256;
-                            break;
-                        case PixelFormat.CMYKA:
-                            newLayer.BitsPerPixel = 320;
-                            break;
-                    }
-                    break;
-            }
+            newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.PixelFormat, newLayer.BitsPerChannel);
 
             if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = newLayer.BitsPerPixel;
 
@@ -585,6 +511,89 @@
             Info.Frames[FrameID].Layers?.Add(newLayer);
 
             return (ulong)Info.Frames[FrameID].Layers.Count - 1;
+        }
+
+        private int CalculateBitsPerPixel(PixelFormat pixelFormat, BitsPerChannel bitsPerChannel) {
+            switch (bitsPerChannel) {
+                case BitsPerChannel.BPC_UInt8:
+                    switch (pixelFormat) {
+                        case PixelFormat.GRAY:
+                            return 8;
+                        case PixelFormat.GRAYA:
+                            return 16;
+                        case PixelFormat.RGB:
+                        case PixelFormat.YCrCb:
+                            return 24;
+                        case PixelFormat.RGBA:
+                        case PixelFormat.CMYK:
+                            return 32;
+                        case PixelFormat.CMYKA:
+                            return 40;
+                    }
+                    break;
+                case BitsPerChannel.BPC_UInt16_BE:
+                case BitsPerChannel.BPC_UInt16_LE:
+                case BitsPerChannel.BPP_YCrCbPacked_16:
+                    switch (pixelFormat) {
+                        case PixelFormat.GRAY:
+                            return 16;
+                        case PixelFormat.GRAYA:
+                            return 32;
+                        case PixelFormat.RGB:
+                        case PixelFormat.YCrCb:
+                            return 48;
+                        case PixelFormat.RGBA:
+                        case PixelFormat.CMYK:
+                            return 64;
+                        case PixelFormat.CMYKA:
+                            return 80;
+                    }
+                    break;
+                case BitsPerChannel.BPP_YCrCbPacked_24:
+                    switch (pixelFormat) {
+                        case PixelFormat.YCrCb:
+                            return 24;
+                        default:
+                            throw new InvalidDataException("BitsPerChannel.BPP_YCrCbPacked_24 only works in PixelFormat.YCrCb mode");
+                    }
+                case BitsPerChannel.BPC_UInt32_LE:
+                case BitsPerChannel.BPC_UInt32_BE:
+                case BitsPerChannel.BPC_IEEE_FLOAT32:
+                    switch (pixelFormat) {
+                        case PixelFormat.GRAY:
+                            return 32;
+                        case PixelFormat.GRAYA:
+                            return 64;
+                        case PixelFormat.RGB:
+                        case PixelFormat.YCrCb:
+                            return 96;
+                        case PixelFormat.RGBA:
+                        case PixelFormat.CMYK:
+                            return 128;
+                        case PixelFormat.CMYKA:
+                            return 160;
+                    }
+                    break;
+                case BitsPerChannel.BPC_UInt64_LE:
+                case BitsPerChannel.BPC_UInt64_BE:
+                case BitsPerChannel.BPC_IEEE_FLOAT64:
+                    switch (pixelFormat) {
+                        case PixelFormat.GRAY:
+                            return 64;
+                        case PixelFormat.GRAYA:
+                            return 128;
+                        case PixelFormat.RGB:
+                        case PixelFormat.YCrCb:
+                            return 192;
+                        case PixelFormat.RGBA:
+                        case PixelFormat.CMYK:
+                            return 256;
+                        case PixelFormat.CMYKA:
+                            return 320;
+                    }
+                    break;
+            }
+            return 0;
         }
 
         private (uint w, uint h) CalculateTileDimension(PixelFormat pixelFormat, BitsPerChannel bitsPerChannel) {
