@@ -77,6 +77,16 @@ namespace BNG_CLI {
                         StringBuilder log;
                         BNGToDecode.LoadBNG(ref inFile, out log);
                         Console.WriteLine(log.ToString());
+
+                        Stream outFileDec = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0xFF00000);
+                        void pChangedDec(double progress) {
+                            Console.CursorLeft = 0;
+                            Console.Write(string.Format("{0:0.00}%", progress));
+                        }
+
+                        BNGToDecode.ProgressChangedEvent += pChangedDec;
+                        BNGToDecode.DecodeToRaw(ref inFile, ref outFileDec, 0, 0);
+
                         inFile.Close();
                         inFile.Dispose();
                         break;

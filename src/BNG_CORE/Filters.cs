@@ -2,10 +2,10 @@
     //https://www.w3.org/TR/PNG-Filters.html
     public class Sub {
         public byte Filter(ref byte[] line, long col, int BytesPerPixel) {
-            return (byte)(line[col] - ((col - BytesPerPixel) < 0 ? 0 : line[col - BytesPerPixel]) % (uint)256);
+            return (byte)(line[col] - ((col - BytesPerPixel) < 0 ? 0 : line[col - BytesPerPixel]));
         }
-        public byte UnFilter(ref byte[] line, long col, int BytesPerPixel) {
-            return (byte)(line[col] + ((col - BytesPerPixel) < 0 ? 0 : line[col - BytesPerPixel]) % (uint)256);
+        public byte UnFilter(ref byte[] line, ref byte[] dLine, long col, int BytesPerPixel) {
+            return (byte)(line[col] + ((col - BytesPerPixel) < 0 ? 0 : dLine[col - BytesPerPixel]));
         }
     }
 
