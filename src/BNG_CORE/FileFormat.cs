@@ -120,6 +120,10 @@
         public byte Version { get; set; }
         [MemoryPackIgnore]
         public ulong HeaderLength { get; set; }
+        [MemoryPackIgnore]
+        public ulong DataStartOffset { get; set; }
+        [MemoryPackIgnore]
+        public ulong DataLength { get; set; }
         public uint Width { get; set; }
         public uint Height { get; set; }
         public List<DataBlock>? Metadata { get; set; }
@@ -191,7 +195,9 @@
             //Read first 4 byte and check if it's the BNG! identifier
             byte[] ident = new byte[4];
             InputStream.Read(ident);
-            if (BitConverter.ToInt32(ident) != 0x21744e42) {
+            uint intIdent = BitConverter.ToUInt32(ident);
+
+            if (intIdent != 0x21744e42 || intIdent != 0x53744e42) {
                 if(Strict) throw new InvalidDataException("This is not a BNG file!");
             }
 
@@ -202,20 +208,36 @@
             ulong headerOffset = BitConverter.ToUInt64(baHeaderOffset);
             if (headerOffset > streamLength) throw new InvalidDataException("The header offset is out of bounds");
 
-            //Try to read the header
-            byte[] binaryHeader = new byte[streamLength - headerOffset];
-            InputStream.Seek((long)headerOffset, SeekOrigin.Begin);
-            InputStream.Read(binaryHeader);
-            Header header;
+            //If the identifier ends with S (BNGS) then the header has been moved to the beginning of the file for streaming.
+            if (intIdent == 0x53744e42) {
+                //Try to read the header
+                byte[] binaryHeader = new byte[headerOffset]; //This is now the header size
+                InputStream.Read(binaryHeader);
 
-            using (var decompressor = new BrotliDecompressor()) {
-                var decompressedBuffer = decompressor.Decompress(binaryHeader);
-                header = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                using (var decompressor = new BrotliDecompressor()) {
+                    var decompressedBuffer = decompressor.Decompress(binaryHeader);
+                    Info = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                }
+                Info.DataStartOffset = (ulong)InputStream.Position;
+                Info.HeaderLength = (ulong)binaryHeader.LongLength;
+            }
+            else 
+            {
+                //Try to read the header
+                byte[] binaryHeader = new byte[streamLength - headerOffset];
+                Info.DataStartOffset = (ulong)InputStream.Position;
+
+                InputStream.Seek((long)headerOffset, SeekOrigin.Begin);
+                InputStream.Read(binaryHeader);
+
+                using (var decompressor = new BrotliDecompressor()) {
+                    var decompressedBuffer = decompressor.Decompress(binaryHeader);
+                    Info = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                }
+                Info.HeaderLength = (ulong)binaryHeader.LongLength;
             }
 
-            Info = header;
-            header = null;
-            GC.Collect();
+            Info.DataLength = (ulong)InputStream.Length - Info.HeaderLength - 12;
 
             log.AppendLine(string.Format("BNG Version..........: {0}", Info.Version));
             log.AppendLine(string.Format("Width................: {0}", Info.Width));
@@ -248,7 +270,7 @@
                     log.AppendLine(string.Format("Pre-filter...........: {0}", Info.Frames[frame].Layers[layer].CompressionPreFilter.ToString()));
                     log.AppendLine(string.Format("Base tile dimension W: {0}", Info.Frames[frame].Layers[layer].BaseTileDimension.w));
                     log.AppendLine(string.Format("Base tile dimension H: {0}", Info.Frames[frame].Layers[layer].BaseTileDimension.h));
-                    log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= Info.Frames[frame].Layers.Count ? (ulong)InputStream.Length - (ulong)binaryHeader.LongLength : Info.Frames[frame].LayerDataOffsets[layer+1]) - Info.Frames[frame].LayerDataOffsets[layer]));
+                    log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= Info.Frames[frame].Layers.Count ? (ulong)InputStream.Length - Info.HeaderLength - 12 : Info.Frames[frame].LayerDataOffsets[layer+1]) - Info.Frames[frame].LayerDataOffsets[layer]));
                     log.AppendLine(string.Format("Uncompressed size (\"): {0}", Info.Frames[frame].Layers[layer].Width * Info.Frames[frame].Layers[layer].Height * CalculateBitsPerPixel(Info.Frames[frame].Layers[layer].PixelFormat, Info.Frames[frame].Layers[layer].BitsPerChannel) / 8));
                     log.AppendLine(string.Format("Number of tiles......: {0}", Info.Frames[frame].Layers[layer].TileDataOffsets.LongLength));
 
@@ -264,7 +286,7 @@
                             if (tileX == txl-1 && tileY != tyl-1) {
                                 tleSzPacked = Info.Frames[frame].Layers[layer].TileDataOffsets[0, tileY + 1] - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
                             } else if (tileX == txl-1 && tileY == tyl-1) {
-                                tleSzPacked = (ulong)InputStream.Length - (ulong)binaryHeader.LongLength - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
+                                tleSzPacked = (ulong)InputStream.Length - Info.HeaderLength - 12 - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
                             } else {
                                 tleSzPacked = Info.Frames[frame].Layers[layer].TileDataOffsets[tileX + 1, tileY] - Info.Frames[frame].Layers[layer].TileDataOffsets[tileX, tileY];
                             }
@@ -278,8 +300,6 @@
                     }
                 }
             }
-
-            Info.HeaderLength = (ulong)binaryHeader.LongLength;
         }
 
         public void WriteBitmapFile(ref Stream OutputStream) {
