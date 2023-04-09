@@ -8,7 +8,9 @@
     using SevenZip.Buffer;
     using System;
     using System.IO.Compression;
+    using System.Reflection.Emit;
     using System.Text;
+    using ZstdSharp;
 
     public enum LayerBlendMode : byte {
         Normal = 0x00,
@@ -59,12 +61,6 @@
         BPC_UInt64_BE = 0xA6,
         BPC_IEEE_FLOAT32 = 0xF1, // float
         BPC_IEEE_FLOAT64 = 0xF2, // double
-
-        //YCrCb
-        BPP_YCrCbPacked_9 = 0x30, //4:1:0
-        BPP_YCrCbPacked_12 = 0x31, //4:2:0
-        BPP_YCrCbPacked_16 = 0x32, //4:2:2
-        BPP_YCrCbPacked_24 = 0x33, //4:4:4
     }
 
     public enum DataBlockType : byte {
@@ -266,9 +262,9 @@
 
                     var txl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(0);
                     var tyl = Info.Frames[frame].Layers[layer].TileDataOffsets.GetLongLength(1);
-                    Info.Frames[frame].Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl]; 
-                    for (uint tileX = 0; tileX < txl; tileX++ ) {
-                        for (uint tileY = 0; tileY < tyl; tileY++) {
+                    Info.Frames[frame].Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl];
+                    for (uint tileY = 0; tileY < tyl; tileY++) {
+                        for (uint tileX = 0; tileX < txl; tileX++ ) {
                             string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
                             log.Append(tleNum);
                             log.AppendLine(new string('-', 40 - tleNum.Length));
@@ -295,6 +291,93 @@
             }
         }
 
+        void DecodeToRaw(ref Stream InputStream, ref Stream OutputStream, int FrameID, int LayerID) {
+            if (InputStream == null) throw new ArgumentNullException(nameof(File));
+            if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
+            if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
+            if (OutputStream == null) throw new ArgumentNullException(nameof(File));
+            if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
+            if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
+
+            var txl = Info.Frames[FrameID].Layers[LayerID].TileDataOffsets.GetLongLength(0);
+            var tyl = Info.Frames[FrameID].Layers[LayerID].TileDataOffsets.GetLongLength(1);
+            var bytesPerPixel = Info.Frames[FrameID].Layers[LayerID].BitsPerPixel / 8;
+
+            InputStream.Seek((long)Info.DataStartOffset, SeekOrigin.Begin);
+
+            for (uint Y = 0; Y < tyl; Y++) {
+                var tileRows = Info.Frames[FrameID].Layers[LayerID].TileDimensions[0,Y].h;
+                List<(uint index, byte[] data)> rowTiles = new List<(uint index, byte[] data)>();
+                for (uint tileRow = 0; tileRow < tileRows; tileRow++) {
+                    for (uint X = 0; X < txl; X++) {
+                        //Decompress tile data
+                        //Process combined compression algorithms
+                        var tileCols = Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w;
+                        byte[] cBuff = new byte[tileCols * bytesPerPixel];
+
+                        var uncompressedSize = (int)(Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].h * bytesPerPixel);
+                        byte[] oBuff = new byte[uncompressedSize];
+
+                        InputStream.Read(cBuff);
+
+                        DeCompress(Info.Frames[FrameID].Layers[LayerID].Compression, uncompressedSize, ref cBuff, ref oBuff);
+
+                        if (!rowTiles.Exists(x => x.index == X)) {
+                            rowTiles.Add((X, oBuff));
+                        }
+
+                        byte[] row = new byte[tileCols];
+                        
+                    }
+                }
+            }
+        }
+
+        private void DeCompress(Compression compression, int uncompressedSize, ref byte[]cBuff, ref byte[] oBuff) {
+
+            switch (compression) {
+                case Compression.LZ4:
+                    var LZ4Dec = LZ4Decoder.Create(false, uncompressedSize);
+                    int decd;
+                    cBuff = new byte[uncompressedSize];
+                    LZ4Dec.DecodeAndDrain(cBuff.ToArray(), 0, uncompressedSize, oBuff, 0, uncompressedSize, out decd);
+                    LZ4Dec.Dispose();
+                    break;
+                case Compression.ArithmeticOrder0:
+                    Compressors.Arithmetic.AbstractModel arithModelOder0Coder = new Compressors.Arithmetic.ModelOrder0();
+                    using (MemoryStream msUnCompress = new MemoryStream())
+                    using (MemoryStream msInput = new MemoryStream(cBuff.ToArray())) {
+                        arithModelOder0Coder.Process(msInput, msUnCompress, Compressors.Arithmetic.ModeE.MODE_DECODE);
+                        msUnCompress.Flush();
+                        oBuff = msUnCompress.ToArray();
+                    }
+                    break;
+                case Compression.ZLIB:
+                    using (MemoryStream msUnCompress = new MemoryStream()) {
+                        ZInputStream zs = new ZInputStream(msUnCompress);
+                        zs.Read(cBuff.ToArray());
+                        oBuff = msUnCompress.ToArray();
+                    }
+                    break;
+                case Compression.GZIP:
+                    GZipCompressor gZipCompressor = new GZipCompressor();
+                    oBuff = gZipCompressor.Decompress(cBuff.ToArray());
+                    break;
+                case Compression.Brotli:
+                    var bd = new BrotliDecoder();
+                    int consumed, written;
+                    bd.Decompress(cBuff.ToArray(), oBuff, out consumed, out written);
+                    break;
+                case Compression.LZMA:
+                    LZMACompressor lzmaCompressor = new LZMACompressor();
+                    cBuff = lzmaCompressor.Decompress(cBuff.ToArray());
+                    break;
+                case Compression.ZSTD:
+                    ZstdSharp.Decompressor zstdDeCompressor = new ZstdSharp.Decompressor();
+                    oBuff = zstdDeCompressor.Unwrap(cBuff.ToArray()).ToArray();
+                    break;
+            }
+        }
         #endregion
 
         #region Helpers
@@ -318,7 +401,6 @@
                     break;
                 case BitsPerChannel.BPC_UInt16_BE:
                 case BitsPerChannel.BPC_UInt16_LE:
-                case BitsPerChannel.BPP_YCrCbPacked_16:
                     switch (pixelFormat) {
                         case PixelFormat.GRAY:
                             return 16;
@@ -334,7 +416,6 @@
                             return 80;
                     }
                     break;
-                case BitsPerChannel.BPP_YCrCbPacked_24:
                     switch (pixelFormat) {
                         case PixelFormat.YCrCb:
                             return 24;
@@ -405,17 +486,13 @@
                 case PixelFormat.YCrCb:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                        case BitsPerChannel.BPP_YCrCbPacked_9:
                             return (1024, 1024); // 1 MByte tiles
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
-                        case BitsPerChannel.BPP_YCrCbPacked_12:
-                        case BitsPerChannel.BPP_YCrCbPacked_16:
                             return (1448, 1448); // ~2 MByte tiles
                         case BitsPerChannel.BPC_UInt32_LE:
                         case BitsPerChannel.BPC_UInt32_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT32:
-                        case BitsPerChannel.BPP_YCrCbPacked_24:
                             return (2048, 2048); // 4 MByte tiles
                         case BitsPerChannel.BPC_UInt64_LE:
                         case BitsPerChannel.BPC_UInt64_BE:
@@ -428,7 +505,6 @@
                 case PixelFormat.YCrCbA:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                        case BitsPerChannel.BPP_YCrCbPacked_9:
                             return (1280, 1280); // 1.56 MByte tiles
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
@@ -465,7 +541,7 @@
         }
         #endregion
 
-        #region For writing
+        #region Writing
         public Bitmap(string ImportFileName, ImportParameters Options) {
             Info = new Header();
             Info.Frames = new List<Frame>();
@@ -522,47 +598,7 @@
                                 inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                                 InputStream.Seek(inputOffset, SeekOrigin.Begin);
                                 InputStream.Read(lineBuff);
-                                switch (Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter) {
-                                    case CompressionPreFilter.Paeth:
-                                        byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                                        Filters.Paeth paethFilter = new Filters.Paeth();
-                                        for (long col = 0; col < lineBuff.LongLength; col++) {
-                                            paethLineBuff[col] = paethFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                                        }
-                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
-                                        iBuff.Write(paethLineBuff);
-                                        break;
-                                    case CompressionPreFilter.Sub:
-                                        byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                                        Filters.Sub subFilter = new Filters.Sub();
-                                        for (long col = 0; col < lineBuff.LongLength; col++) {
-                                            subLineBuff[col] = subFilter.Filter(ref lineBuff, col, BytesPerPixel);
-                                        }
-                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
-                                        iBuff.Write(subLineBuff);
-                                        break;
-                                    case CompressionPreFilter.Up:
-                                        byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                                        Filters.Up upFilter = new Filters.Up();
-                                        for (long col = 0; col < lineBuff.LongLength; col++) {
-                                            upLineBuff[col] = upFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                                        }
-                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
-                                        iBuff.Write(upLineBuff);
-                                        break;
-                                    case CompressionPreFilter.Average:
-                                        byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                                        Filters.Average avgFilter = new Filters.Average();
-                                        for (long col = 0; col < lineBuff.LongLength; col++) {
-                                            avgLineBuff[col] = avgFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                                        }
-                                        Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
-                                        iBuff.Write(avgLineBuff);
-                                        break;
-                                    default:
-                                        iBuff.Write(lineBuff);
-                                        break;
-                                }
+                                Filter(Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
                             }
 
                             bytesWritten += lineBuff.LongLength * corrTileSize.h;
@@ -570,67 +606,7 @@
 
                             Info.Frames[FrameID].Layers[LayerID].TileDataOffsets[x, y] = (ulong)OutputStream.Position;
 
-                            //Process combined compression algorithms
-                            var f = new Compression();
-                            f = Info.Frames[FrameID].Layers[LayerID].Compression;
-                            if (f.HasFlag(Compression.LZ4)) {
-                                var LZ4Enc = LZ4Encoder.Create(false, (LZ4Level)Info.Frames[FrameID].Layers[LayerID].CompressionLevel, (int)iBuff.Length);
-                                int ld, encd;
-                                cBuff = new byte[iBuff.Length];
-                                LZ4Enc.TopupAndEncode(iBuff.ToArray(), cBuff, true, false, out ld, out encd);
-                                LZ4Enc.Dispose();
-                                Array.Resize(ref cBuff, encd);
-                                iBuff = new MemoryStream(cBuff);
-                            }
-                            
-                            if (f.HasFlag(Compression.ArithmeticOrder0)) {
-                                Compressors.Arithmetic.AbstractModel arithModelOder0Coder = new Compressors.Arithmetic.ModelOrder0();
-                                using (MemoryStream msCompress = new MemoryStream())
-                                using (MemoryStream msInput = new MemoryStream(iBuff.ToArray())) {
-                                    arithModelOder0Coder.Process(msInput, msCompress, Compressors.Arithmetic.ModeE.MODE_ENCODE);
-                                    msCompress.Flush();
-                                    cBuff = msCompress.ToArray();
-                                }
-                                iBuff = new MemoryStream(cBuff);
-                            }
-
-                            if (f.HasFlag(Compression.ZLIB)) {
-                                using (MemoryStream msCompress = new MemoryStream()) {
-                                    ZOutputStream zs = new ZOutputStream(msCompress, Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
-                                    zs.Write(iBuff.ToArray());
-                                    zs.Flush();
-                                    cBuff = msCompress.ToArray();
-                                }
-                                iBuff = new MemoryStream(cBuff);
-                            }
-
-                            if (f.HasFlag(Compression.GZIP)) {
-                                GZipCompressor gZipCompressor = new GZipCompressor(null, (CompressionLevel)Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
-                                cBuff = gZipCompressor.Compress(iBuff.ToArray());
-                                iBuff = new MemoryStream(cBuff);
-                            }
-
-                            if (f.HasFlag(Compression.LZMA)) {
-                                LZMACompressor lzmaCompressor = new LZMACompressor();
-                                cBuff = lzmaCompressor.Compress(iBuff.ToArray());
-                                iBuff = new MemoryStream(cBuff);
-                            }
-
-
-                            if (f.HasFlag(Compression.Brotli)) {
-                                cBuff = new byte[iBuff.Length];
-                                using (var be = new BrotliEncoder(Info.Frames[FrameID].Layers[LayerID].CompressionLevel, Info.Frames[FrameID].Layers[LayerID].BrotliWindowSize)) {
-                                    int consumed, written;
-                                    be.Compress(iBuff.ToArray(), cBuff, out consumed, out written, true);
-                                    Array.Resize(ref cBuff, written);
-                                }
-                                iBuff = new MemoryStream(cBuff);
-                            }
-
-                            if (f.HasFlag(Compression.ZSTD)) {
-                                ZstdSharp.Compressor zstdCompressor = new ZstdSharp.Compressor(Info.Frames[FrameID].Layers[LayerID].CompressionLevel);
-                                cBuff = zstdCompressor.Wrap(iBuff.ToArray()).ToArray();
-                            }
+                            Compress(Info.Frames[FrameID].Layers[LayerID].Compression, Info.Frames[FrameID].Layers[LayerID].CompressionLevel, Info.Frames[FrameID].Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
 
                             OutputStream.Write(cBuff);
                         }
@@ -658,6 +634,100 @@
             Array.Clear(headerData);
             OutputStream.Close();
 
+        }
+
+        void Filter(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, ref byte[] lineBuff, ref byte[] prevLineBuff, ref MemoryStream iBuff, int BytesPerPixel) {
+            switch (compressionPreFilter) {
+                case CompressionPreFilter.Paeth:
+                    byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                    Filters.Paeth paethFilter = new Filters.Paeth();
+                    for (long col = 0; col < lineBuff.LongLength; col++) {
+                        paethLineBuff[col] = paethFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                    }
+                    Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                    iBuff.Write(paethLineBuff);
+                    break;
+                case CompressionPreFilter.Sub:
+                    byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                    Filters.Sub subFilter = new Filters.Sub();
+                    for (long col = 0; col < lineBuff.LongLength; col++) {
+                        subLineBuff[col] = subFilter.Filter(ref lineBuff, col, BytesPerPixel);
+                    }
+                    Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                    iBuff.Write(subLineBuff);
+                    break;
+                case CompressionPreFilter.Up:
+                    byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                    Filters.Up upFilter = new Filters.Up();
+                    for (long col = 0; col < lineBuff.LongLength; col++) {
+                        upLineBuff[col] = upFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                    }
+                    Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                    iBuff.Write(upLineBuff);
+                    break;
+                case CompressionPreFilter.Average:
+                    byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                    Filters.Average avgFilter = new Filters.Average();
+                    for (long col = 0; col < lineBuff.LongLength; col++) {
+                        avgLineBuff[col] = avgFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                    }
+                    Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                    iBuff.Write(avgLineBuff);
+                    break;
+                default:
+                    iBuff.Write(lineBuff);
+                    break;
+            }
+        }
+
+        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, ref MemoryStream iBuff, ref byte[] cBuff) {
+            switch (compression) {
+                case Compression.LZ4:
+                    var LZ4Enc = LZ4Encoder.Create(false, (LZ4Level)compressionLevel, (int)iBuff.Length);
+                    int ld, encd;
+                    cBuff = new byte[iBuff.Length];
+                    LZ4Enc.TopupAndEncode(iBuff.ToArray(), cBuff, true, false, out ld, out encd);
+                    LZ4Enc.Dispose();
+                    Array.Resize(ref cBuff, encd);
+                    break;
+                case Compression.ArithmeticOrder0:
+                    Compressors.Arithmetic.AbstractModel arithModelOder0Coder = new Compressors.Arithmetic.ModelOrder0();
+                    using (MemoryStream msCompress = new MemoryStream())
+                    using (MemoryStream msInput = new MemoryStream(iBuff.ToArray())) {
+                        arithModelOder0Coder.Process(msInput, msCompress, Compressors.Arithmetic.ModeE.MODE_ENCODE);
+                        msCompress.Flush();
+                        cBuff = msCompress.ToArray();
+                    }
+                    break;
+                case Compression.ZLIB:
+                    using (MemoryStream msCompress = new MemoryStream()) {
+                        ZOutputStream zs = new ZOutputStream(msCompress, compressionLevel);
+                        zs.Write(iBuff.ToArray());
+                        zs.Flush();
+                        cBuff = msCompress.ToArray();
+                    }
+                    break;
+                case Compression.GZIP:
+                    GZipCompressor gZipCompressor = new GZipCompressor(null, (CompressionLevel)compressionLevel);
+                    cBuff = gZipCompressor.Compress(iBuff.ToArray());
+                    break;
+                case Compression.LZMA:
+                    LZMACompressor lzmaCompressor = new LZMACompressor();
+                    cBuff = lzmaCompressor.Compress(iBuff.ToArray());
+                    break;
+                case Compression.Brotli:
+                    cBuff = new byte[iBuff.Length];
+                    using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize)) {
+                        int consumed, written;
+                        be.Compress(iBuff.ToArray(), cBuff, out consumed, out written, true);
+                        Array.Resize(ref cBuff, written);
+                    }
+                    break;
+                case Compression.ZSTD:
+                    ZstdSharp.Compressor zstdCompressor = new ZstdSharp.Compressor(compressionLevel);
+                    cBuff = zstdCompressor.Wrap(iBuff.ToArray()).ToArray();
+                    break;
+            }
         }
 
         /// <summary>
