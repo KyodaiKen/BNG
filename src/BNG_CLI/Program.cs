@@ -1,5 +1,6 @@
 ﻿using BNG_CORE;
 using CommandLine;
+using System.Runtime.CompilerServices;
 
 namespace BNG_CLI {
     public enum Task {
@@ -9,7 +10,7 @@ namespace BNG_CLI {
     public class Options {
         [Option('t', "task", Required = true, HelpText = "Task to be done")]
         public Task Task { get; set; } = Task.Encode;
-        [Option('i', "input", Required = true, HelpText = "Input file to be processed")]
+        [Option('i', "input", Required = true, HelpText = "Input file to be processed (RAW Bitmap only)")]
         public string InputFile { get; set; } = "";
         [Option('o', "output", Required = true, HelpText = "Output file to be written to")]
         public string OutputFile { get; set; } = "";
@@ -17,19 +18,19 @@ namespace BNG_CLI {
         public uint SrcWidth { get; set; }
         [Option("src-height", Required = true, HelpText = "Source height")]
         public uint SrcHeight { get; set; }
-        [Option('p', "src-pix-fmt", Required = false, HelpText = "Source pixel format")]
+        [Option('p', "src-pix-fmt", Required = false, HelpText = "Source pixel format", Default = PixelFormat.RGB)]
         public PixelFormat PixFmt { get; set; } = PixelFormat.RGB;
-        [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel")]
+        [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel", Default = BitsPerChannel.BPC_UInt8)]
         public BitsPerChannel BPC { get; set; } = BitsPerChannel.BPC_UInt8;
-        [Option("src-res-h", Required = false, HelpText = "Source horizontal resolution in dpi")]
+        [Option("src-res-h", Required = false, HelpText = "Source horizontal resolution in dpi", Default = 72)]
         public double SrcResolutionH { get; set; } = 72;
-        [Option("src-res-v", Required = false, HelpText = "Source vertical resolution in dpi")]
+        [Option("src-res-v", Required = false, HelpText = "Source vertical resolution in dpi", Default = 72)]
         public double SrcResolutionV { get; set; } = 72;
-        [Option('c', "compressor", Required = false, HelpText = "Compression algorithm")]
+        [Option('c', "compressor", Required = false, HelpText = "Compression algorithm: None, GZIP, ZLIB, Brotli, ZSTD, ArithmeticOrder0, LZ4, LZMA", Default = Compression.ZSTD)]
         public Compression Compression { get; set; } = Compression.ZSTD;
-        [Option('f', "filter", Required = false, HelpText = "Compression filter")]
+        [Option('f', "filter", Required = false, HelpText = "Compression filter: None, Sub, Up, Average, Paeth", Default = CompressionPreFilter.Paeth)]
         public CompressionPreFilter CompressionFilter { get; set; } = CompressionPreFilter.Paeth;
-        [Option('l', "level", Required = false, HelpText = "Compression level")]
+        [Option('l', "level", Required = false, HelpText = "Compression level", Default = 8)]
         public int CompressionLevel { get; set; } = 8;
     }
     class Program {
@@ -39,6 +40,7 @@ namespace BNG_CLI {
 
             void why(ParserSettings fy) {
                 fy.HelpWriter = Help;
+                fy.CaseSensitive = false;
             }
 
             var parms = cmdParser.ParseArguments<Options>(args);
