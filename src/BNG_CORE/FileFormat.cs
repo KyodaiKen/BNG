@@ -350,7 +350,7 @@
             switch (compressionPreFilter) {
                 case CompressionPreFilter.Paeth:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Paeth.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Paeth.UnFilter(ref lineBuff,ref unfilteredLine, ref prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Sub:

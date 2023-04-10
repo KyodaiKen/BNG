@@ -20,24 +20,24 @@
 
     public static class Average {
         public static byte Filter(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
-            return (byte)(cLine[col] - InternalFilter(ref cLine, ref pLine, col, BytesPerPixel));
+            return (byte)(cLine[col] - Predictor(ref cLine, ref pLine, col, BytesPerPixel));
         }
         public static byte UnFilter(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
-            return (byte)(cLine[col] + InternalFilter(ref cLine, ref pLine, col, BytesPerPixel));
+            return (byte)(cLine[col] + Predictor(ref cLine, ref pLine, col, BytesPerPixel));
         }
-        private static int InternalFilter(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
+        private static int Predictor(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
             return (int)Math.Floor((double)((col - BytesPerPixel) < 0 ? 0 : cLine[col - BytesPerPixel] + (col - BytesPerPixel) < 0 ? 0 : pLine[col - BytesPerPixel] / 2d));
         }
     }
 
     public static class Paeth {
         public static byte Filter(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
-            return (byte)(cLine[col] - InternalFilter((col - BytesPerPixel < 0) ? (byte)0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? (byte)0 : pLine[col]));
+            return (byte)(cLine[col] - Predictor((col - BytesPerPixel < 0) ? (byte)0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? (byte)0 : pLine[col - BytesPerPixel]));
         }
-        public static byte UnFilter(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
-            return (byte)(cLine[col] + InternalFilter((col - BytesPerPixel < 0) ? (byte)0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? (byte)0 : pLine[col]));
+        public static byte UnFilter(ref byte[] cLine, ref byte[] dLine, ref byte[] pLine, long col, int BytesPerPixel) {
+            return (byte)(cLine[col] + Predictor((col - BytesPerPixel < 0) ? (byte)0 : dLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? (byte)0 : pLine[col - BytesPerPixel]));
         }
-        private static byte InternalFilter(byte left, byte above, byte upperLeft) {
+        private static int Predictor(byte left, byte above, byte upperLeft) {
             var p = left + above - upperLeft;
             var pa = Math.Abs(p - left);
             var pb = Math.Abs(p - above);
