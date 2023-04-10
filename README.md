@@ -3,6 +3,8 @@
 Better Network Graphics / Borg Network Graphics
 
 ## Under development
+- Multi threading not developed yet
+- Encoding and decoding of raw images (raw pixel data) working! Tests look promising!
 
 ## Supports:
 - Pixel formats: Gray/Alpha only, Gray with Alpha, RGB, YCrCb, CMYK, RGBA, YCrCbA, CMYKA
