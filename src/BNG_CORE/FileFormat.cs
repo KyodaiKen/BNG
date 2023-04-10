@@ -466,76 +466,9 @@
         }
 
         private (uint w, uint h) CalculateTileDimension(PixelFormat pixelFormat, BitsPerChannel bitsPerChannel) {
-            int numChannels = 0;
-            switch (pixelFormat) {
-                case PixelFormat.GRAY:
-                    numChannels = 1;
-                    break;
-                case PixelFormat.GRAYA:
-                    numChannels = 2;
-                    break;
-                case PixelFormat.RGB:
-                case PixelFormat.YCrCb:
-                case PixelFormat.CMYK:
-                    numChannels = 3;
-                    break;
-                case PixelFormat.RGBA:
-                case PixelFormat.YCrCbA:
-                    numChannels = 4;
-                    break;
-                case PixelFormat.CMYKA:
-                    numChannels = 5;
-                    break;
-            }
             int bytesPerPixel = CalculateBitsPerPixel(pixelFormat, bitsPerChannel) / 8;
             uint size = (uint)(4096 / bytesPerPixel);
             return (size, size);
-
-            /*
-            switch (pixelFormat) {
-                case PixelFormat.GRAY:
-                case PixelFormat.GRAYA:
-                    switch (bitsPerChannel) {
-                        case BitsPerChannel.BPC_UInt8:
-                            return (3027, 3027);
-                        case BitsPerChannel.BPC_UInt16_LE:
-                        case BitsPerChannel.BPC_UInt16_BE:
-                            return (1536, 1536);
-                        case BitsPerChannel.BPC_UInt32_LE:
-                        case BitsPerChannel.BPC_UInt32_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (768, 768);
-                        case BitsPerChannel.BPC_UInt64_LE:
-                        case BitsPerChannel.BPC_UInt64_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (384, 384);
-                    }
-                    break;
-                case PixelFormat.RGB:
-                case PixelFormat.YCrCb:
-                case PixelFormat.CMYK:
-                case PixelFormat.RGBA:
-                case PixelFormat.YCrCbA:
-                case PixelFormat.CMYKA:
-                    switch (bitsPerChannel) {
-                        case BitsPerChannel.BPC_UInt8:
-                            return (1024, 1024);
-                        case BitsPerChannel.BPC_UInt16_LE:
-                        case BitsPerChannel.BPC_UInt16_BE:
-                            return (512, 512);
-                        case BitsPerChannel.BPC_UInt32_LE:
-                        case BitsPerChannel.BPC_UInt32_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (256, 256);
-                        case BitsPerChannel.BPC_UInt64_LE:
-                        case BitsPerChannel.BPC_UInt64_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (128, 128);
-                    }
-                    break;
-            }
-            return (1024, 1024);
-            */
         }
         #endregion
 
