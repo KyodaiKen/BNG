@@ -39,6 +39,10 @@ namespace BNG_CLI {
             TextWriter Help = new StringWriter();
             Parser cmdParser = new Parser(why);
 
+            Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en-us");
+            Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-us");
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             void why(ParserSettings fy) {
                 fy.HelpWriter = Help;
                 fy.CaseSensitive = false;
@@ -78,7 +82,7 @@ namespace BNG_CLI {
                         BNGToDecode.LoadBNG(ref inFile, out log);
                         Console.WriteLine(log.ToString());
 
-                        Stream outFileDec = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0xFF00000);
+                        Stream outFileDec = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
                         void pChangedDec(double progress) {
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("{0:0.00}%", progress));
@@ -86,6 +90,10 @@ namespace BNG_CLI {
 
                         BNGToDecode.ProgressChangedEvent += pChangedDec;
                         BNGToDecode.DecodeToRaw(ref inFile, ref outFileDec, 0, 0);
+
+                        outFileDec.Flush();
+                        outFileDec.Close();
+                        outFileDec.Dispose();
 
                         inFile.Close();
                         inFile.Dispose();

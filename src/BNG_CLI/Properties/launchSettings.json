@@ -2,7 +2,8 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-t Decode -i \"N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.bng\" -o \"N:\\commissions\\Bianca\\The_Artspear\\Ref Sheet\\Bianca Overhaul - Variations\\gauntlets-gigapixel.bng-dec.raw\""
+      "commandLineArgs": "-t Decode -i compressed.bng -o decompressed.raw",
+      "workingDirectory": "D:\\temp\\bng_test"
     }
   }
 }
