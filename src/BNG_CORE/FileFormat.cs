@@ -523,6 +523,10 @@
                     break;
                 case PixelFormat.RGB:
                 case PixelFormat.YCrCb:
+                case PixelFormat.CMYK:
+                case PixelFormat.RGBA:
+                case PixelFormat.YCrCbA:
+                case PixelFormat.CMYKA:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
                             return (1024, 1024);
@@ -537,42 +541,6 @@
                         case BitsPerChannel.BPC_UInt64_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT64:
                             return (128, 128);
-                    }
-                    break;
-                case PixelFormat.CMYK:
-                case PixelFormat.RGBA:
-                case PixelFormat.YCrCbA:
-                    switch (bitsPerChannel) {
-                        case BitsPerChannel.BPC_UInt8:
-                            return (768, 768);
-                        case BitsPerChannel.BPC_UInt16_LE:
-                        case BitsPerChannel.BPC_UInt16_BE:
-                            return (384, 384);
-                        case BitsPerChannel.BPC_UInt32_LE:
-                        case BitsPerChannel.BPC_UInt32_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (192, 192);
-                        case BitsPerChannel.BPC_UInt64_LE:
-                        case BitsPerChannel.BPC_UInt64_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (96, 96);
-                    }
-                    break;
-                case PixelFormat.CMYKA:
-                    switch (bitsPerChannel) {
-                        case BitsPerChannel.BPC_UInt8:
-                            return (512, 512);
-                        case BitsPerChannel.BPC_UInt16_LE:
-                        case BitsPerChannel.BPC_UInt16_BE:
-                            return (256, 256);
-                        case BitsPerChannel.BPC_UInt32_LE:
-                        case BitsPerChannel.BPC_UInt32_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (128, 128);
-                        case BitsPerChannel.BPC_UInt64_LE:
-                        case BitsPerChannel.BPC_UInt64_BE:
-                        case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (64, 64);
                     }
                     break;
             }
