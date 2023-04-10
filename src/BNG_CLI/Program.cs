@@ -55,7 +55,9 @@ namespace BNG_CLI {
                         Bitmap BNG = new Bitmap(o.InputFile, new RAWImportParameters() {
                             SourceDimensions = (o.SrcWidth, o.SrcHeight)
                         , SourcePixelFormat = o.PixFmt
+                        , TargetPixelFormat = o.PixFmt
                         , SourceBitsPerChannel = o.BPC
+                        , TargetBitsPerChannel = o.BPC
                         , Resolution = (o.SrcResolutionH, o.SrcResolutionV)
                         , CompressionPreFilter = o.CompressionFilter
                         , Compression = o.Compression

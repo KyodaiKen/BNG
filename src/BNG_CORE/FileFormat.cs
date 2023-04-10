@@ -461,12 +461,6 @@
                             return 80;
                     }
                     break;
-                    switch (pixelFormat) {
-                        case PixelFormat.YCrCb:
-                            return 24;
-                        default:
-                            throw new InvalidDataException("BitsPerChannel.BPP_YCrCbPacked_24 only works in PixelFormat.YCrCb mode");
-                    }
                 case BitsPerChannel.BPC_UInt32_LE:
                 case BitsPerChannel.BPC_UInt32_BE:
                 case BitsPerChannel.BPC_IEEE_FLOAT32:
@@ -513,36 +507,36 @@
                 case PixelFormat.GRAYA:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                            return (512, 512); // 256 KByte tiles
+                            return (3027, 3027);
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
-                            return (724, 724); // ~512 KByte tiles
+                            return (1536, 1536);
                         case BitsPerChannel.BPC_UInt32_LE:
                         case BitsPerChannel.BPC_UInt32_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (1024, 1024); // 1 MByte tiles
+                            return (768, 768);
                         case BitsPerChannel.BPC_UInt64_LE:
                         case BitsPerChannel.BPC_UInt64_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (1448, 1448); // ~2 MByte tiles
+                            return (384, 384);
                     }
                     break;
                 case PixelFormat.RGB:
                 case PixelFormat.YCrCb:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                            return (1024, 1024); // 1 MByte tiles
+                            return (1024, 1024);
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
-                            return (1448, 1448); // ~2 MByte tiles
+                            return (512, 512);
                         case BitsPerChannel.BPC_UInt32_LE:
                         case BitsPerChannel.BPC_UInt32_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (2048, 2048); // 4 MByte tiles
+                            return (256, 256);
                         case BitsPerChannel.BPC_UInt64_LE:
                         case BitsPerChannel.BPC_UInt64_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (2896, 2896); // ~8 MByte
+                            return (128, 128);
                     }
                     break;
                 case PixelFormat.CMYK:
@@ -550,35 +544,35 @@
                 case PixelFormat.YCrCbA:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                            return (1280, 1280); // 1.56 MByte tiles
+                            return (768, 768);
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
-                            return (1920, 1920); // 3.5 MByte tiles
+                            return (384, 384);
                         case BitsPerChannel.BPC_UInt32_LE:
                         case BitsPerChannel.BPC_UInt32_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (3840, 3840); // 11.5 MByte tiles
+                            return (192, 192);
                         case BitsPerChannel.BPC_UInt64_LE:
                         case BitsPerChannel.BPC_UInt64_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (4096, 4096); // 16 MByte
+                            return (96, 96);
                     }
                     break;
                 case PixelFormat.CMYKA:
                     switch (bitsPerChannel) {
                         case BitsPerChannel.BPC_UInt8:
-                            return (1536, 1536); // 2.25 MByte tiles
+                            return (512, 512);
                         case BitsPerChannel.BPC_UInt16_LE:
                         case BitsPerChannel.BPC_UInt16_BE:
-                            return (2300, 2300); // ~5 MByte tiles
+                            return (256, 256);
                         case BitsPerChannel.BPC_UInt32_LE:
                         case BitsPerChannel.BPC_UInt32_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT32:
-                            return (3238, 3238); // ~10 MByte tiles
+                            return (128, 128);
                         case BitsPerChannel.BPC_UInt64_LE:
                         case BitsPerChannel.BPC_UInt64_BE:
                         case BitsPerChannel.BPC_IEEE_FLOAT64:
-                            return (4580, 4580); // ~20 MByte
+                            return (64, 64);
                     }
                     break;
             }
@@ -754,7 +748,7 @@
                     break;
                 case Compression.Brotli:
                     cBuff = new byte[iBuff.Length];
-                    using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize)) {
+                    using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize > 24 ? 24 : brotliWindowSize)) {
                         int consumed, written;
                         be.Compress(iBuff.ToArray(), cBuff, out consumed, out written, true);
                         Array.Resize(ref cBuff, written);
