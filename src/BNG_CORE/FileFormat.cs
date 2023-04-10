@@ -1,4 +1,5 @@
 ﻿namespace BNG_CORE {
+    using BNG_CORE.Filters;
     using ComponentAce.Compression.Libs.zlib;
     using EasyCompressor;
     using K4os.Compression.LZ4;
@@ -11,6 +12,7 @@
     using System.Reflection.Emit;
     using System.Text;
     using ZstdSharp;
+    using static System.Runtime.InteropServices.JavaScript.JSType;
 
     public enum LayerBlendMode : byte {
         Normal = 0x00,
@@ -304,203 +306,120 @@
             if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
 
-            var txl = Info.Frames[FrameID].Layers[LayerID].TileDataOffsets.GetLongLength(0);
-            var tyl = Info.Frames[FrameID].Layers[LayerID].TileDataOffsets.GetLongLength(1);
-            var bytesPerPixel = CalculateBitsPerPixel(Info.Frames[FrameID].Layers[LayerID].PixelFormat, Info.Frames[FrameID].Layers[LayerID].BitsPerChannel) / 8;
+            var layer = Info.Frames[FrameID].Layers[LayerID];
+            var txl = layer.TileDataOffsets.GetLongLength(0);
+            var tyl = layer.TileDataOffsets.GetLongLength(1);
+            var bytesPerPixel = CalculateBitsPerPixel(layer.PixelFormat, layer.BitsPerChannel) / 8;
 
             InputStream.Seek((long)Info.DataStartOffset, SeekOrigin.Begin);
             OutputStream.SetLength(0);
+            long bytesWrittenForProgress = 0;
 
-            if (Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter != CompressionPreFilter.Sub) { //Needs previous row
-                for (uint Y = 0; Y < tyl; Y++) {
-                    var tileRows = Info.Frames[FrameID].Layers[LayerID].TileDimensions[0, Y].h;
-                    List<(uint index, byte[] data)> rowTiles = new List<(uint index, byte[] data)>();
-                    MemoryStream prevRow = new MemoryStream();
-                    for (uint tileRow = 0; tileRow < tileRows; tileRow++) {
-                        for (uint X = 0; X < txl; X++) {
-                            //Decompress tile data
-                            //Process combined compression algorithms
-                            var tileCols = Info.Frames[FrameID].Layers[LayerID].BaseTileDimension.w;
-                            var tileColsSize = Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * bytesPerPixel;
-                            var fullRowSize = (tileCols * (txl - 1) + Info.Frames[FrameID].Layers[LayerID].TileDimensions[txl - 1, 0].w) * bytesPerPixel;
-
-                            //If not decompressed yet, decompress it here.
-                            if (!rowTiles.Exists(x => x.index == X)) {
-                                byte[] cBuff = new byte[Info.Frames[FrameID].Layers[LayerID].TileDataLengths[X, Y]];
-                                var uncompressedSize = (int)(Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].h * bytesPerPixel);
-                                byte[] oBuff = new byte[uncompressedSize];
-                                InputStream.Read(cBuff);
-                                DeCompress(Info.Frames[FrameID].Layers[LayerID].Compression, uncompressedSize, ref cBuff, ref oBuff);
-                                rowTiles.Add((X, oBuff));
-                            }
-
-                            byte[] row = new byte[tileColsSize];
-                            Array.Copy(rowTiles.Where(qtl => qtl.index == X).First().data, tileRow * row.LongLength, row, 0, row.LongLength);
-
-                            //Read from previous line buffer
-                            var dataPrevLine = new byte[tileColsSize];
-                            if (prevRow.Length == fullRowSize) {
-                                prevRow.Seek((tileRow - 1) * row.LongLength, SeekOrigin.Begin);
-                                prevRow.Read(dataPrevLine);
-                            }
-
-                            UnFilter(Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter, Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y], ref row, ref dataPrevLine, ref OutputStream, ref prevRow, bytesPerPixel);
-                        }
-                        ProgressChangedEvent?.Invoke((double)OutputStream.Position / (Info.Frames[FrameID].Layers[LayerID].Width * Info.Frames[FrameID].Layers[LayerID].Height * bytesPerPixel) * 100.0);
-                    }
-                }
-            } else if (Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter == CompressionPreFilter.Sub) { //Doesn't need previous row
-                for (uint Y = 0; Y < tyl; Y++) {
-                    var tileRows = Info.Frames[FrameID].Layers[LayerID].TileDimensions[0, Y].h;
-                    List<(uint index, byte[] data)> rowTiles = new List<(uint index, byte[] data)>();
-                    for (uint tileRow = 0; tileRow < tileRows; tileRow++) {
-                        for (uint X = 0; X < txl; X++) {
-                            var tileColsSize = Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * bytesPerPixel;
-
-                            byte dummy;
-                            if (X == txl - 1 && Y == tyl - 1)
-                                dummy=0;
-
-                            //If not decompressed yet, decompress it here.
-                            if (!rowTiles.Exists(x => x.index == X)) {
-                                byte[] cBuff = new byte[Info.Frames[FrameID].Layers[LayerID].TileDataLengths[X, Y]];
-                                var uncompressedSize = (int)(Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].h * bytesPerPixel);
-                                byte[] oBuff = new byte[uncompressedSize];
-                                InputStream.Read(cBuff);
-                                DeCompress(Info.Frames[FrameID].Layers[LayerID].Compression, uncompressedSize, ref cBuff, ref oBuff);
-                                rowTiles.Add((X, oBuff));
-                            }
-
-                            byte[] row = new byte[tileColsSize];
-                            Array.Copy(rowTiles.Where(qtl => qtl.index == X).First().data, tileRow * row.LongLength, row, 0, row.LongLength);
-
-                            byte[] subLineBuff = new byte[row.LongLength];
-                            Filters.Sub subFilter = new Filters.Sub();
-                            for (long col = 0; col < row.LongLength; col++) {
-                                subLineBuff[col] = subFilter.UnFilter(ref row, ref subLineBuff, col, bytesPerPixel);
-                            }
-
-                            OutputStream.Write(subLineBuff);
-                        }
-                        ProgressChangedEvent?.Invoke((double)OutputStream.Position / (Info.Frames[FrameID].Layers[LayerID].Width * Info.Frames[FrameID].Layers[LayerID].Height * bytesPerPixel) * 100.0);
-                    }
-                }
-            } else if (Info.Frames[FrameID].Layers[LayerID].CompressionPreFilter == CompressionPreFilter.None) { //No filter processing needed
-                for (uint Y = 0; Y < tyl; Y++) {
-                    var tileRows = Info.Frames[FrameID].Layers[LayerID].TileDimensions[0, Y].h;
-                    List<(uint index, byte[] data)> rowTiles = new List<(uint index, byte[] data)>();
-                    for (uint tileRow = 0; tileRow < tileRows; tileRow++) {
-                        for (uint X = 0; X < txl; X++) {
-                            var tileColsSize = Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * bytesPerPixel;
-
-                            //If not decompressed yet, decompress it here.
-                            if (!rowTiles.Exists(x => x.index == X)) {
-                                byte[] cBuff = new byte[Info.Frames[FrameID].Layers[LayerID].TileDataLengths[X, Y]];
-                                var uncompressedSize = (int)(Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].w * Info.Frames[FrameID].Layers[LayerID].TileDimensions[X, Y].h * bytesPerPixel);
-                                byte[] oBuff = new byte[uncompressedSize];
-                                InputStream.Read(cBuff);
-                                DeCompress(Info.Frames[FrameID].Layers[LayerID].Compression, uncompressedSize, ref cBuff, ref oBuff);
-                                rowTiles.Add((X, oBuff));
-                            }
-
-                            byte[] row = new byte[tileColsSize];
-                            Array.Copy(rowTiles.Where(qtl => qtl.index == X).First().data, tileRow * row.LongLength, row, 0, row.LongLength);
-                            OutputStream.Write(row);
-                        }
-                        ProgressChangedEvent?.Invoke((double)OutputStream.Position / (Info.Frames[FrameID].Layers[LayerID].Width * Info.Frames[FrameID].Layers[LayerID].Height * bytesPerPixel) * 100.0);
-                    }
+            for (uint Y = 0; Y < tyl; Y++) {
+                for (uint X = 0; X < txl; X++) {
+                    UnpackTileToStream(ref layer, (X, Y), ref InputStream, ref OutputStream, bytesPerPixel, ref bytesWrittenForProgress);
+                    ProgressChangedEvent?.Invoke((double)bytesWrittenForProgress / (layer.Width * layer.Height * bytesPerPixel) * 100.0);
                 }
             }
         }
 
-        void UnFilter(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, ref byte[] lineBuff, ref byte[] prevLineBuff, ref Stream oBuff, ref MemoryStream prevRowBuff, int BytesPerPixel) {
+        private void UnpackTileToStream(ref Layer layer, (uint x, uint y) tileIndex, ref Stream inStream, ref Stream outStream, int bytesPerPixel, ref long bytesWritten) {
+            //Read and decompress tile
+            byte[] compressedTileBuffer = new byte[layer.TileDataLengths[tileIndex.x, tileIndex.y]];
+            byte[] tileBuffer = new byte[layer.TileDimensions[tileIndex.x, tileIndex.y].w * layer.TileDimensions[tileIndex.x, tileIndex.y].h * bytesPerPixel];
+            inStream.Read(compressedTileBuffer);
+            DeCompress(layer.Compression, tileBuffer.Length, ref compressedTileBuffer, ref tileBuffer);
+
+            var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
+            var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
+            byte[] prevRow = new byte[tileRowRawLength]; //This also doubles as the unfiltered row for writing to the stream!
+            byte[] row = new byte[tileRowRawLength];
+            var stride = layer.Width * bytesPerPixel;
+
+            for (uint r = 0; r < tileRows; r++) {
+                Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, ref row, ref prevRow);
+                outStream.Seek(layer.BaseTileDimension.h * tileIndex.y * stride + r * stride + layer.BaseTileDimension.w * tileIndex.x * bytesPerPixel, SeekOrigin.Begin);
+                outStream.Write(prevRow);
+                bytesWritten += prevRow.LongLength;
+            }
+        }
+
+        private byte[] DecodeFilter4TileScanline(CompressionPreFilter compressionPreFilter, int rowLength, int bytesPerPixel, ref byte[] lineBuff, ref byte[] prevLineBuff) {
+            byte[] unfilteredLine = new byte[rowLength];
             switch (compressionPreFilter) {
                 case CompressionPreFilter.Paeth:
-                    byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Paeth paethFilter = new Filters.Paeth();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        paethLineBuff[col] = paethFilter.UnFilter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        unfilteredLine[col] = Paeth.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
                     }
-                    oBuff.Write(paethLineBuff);
-                    prevRowBuff.Write(paethLineBuff);
                     break;
                 case CompressionPreFilter.Sub:
-                    byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Sub subFilter = new Filters.Sub();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        subLineBuff[col] = subFilter.UnFilter(ref lineBuff, ref subLineBuff, col, BytesPerPixel);
+                        unfilteredLine[col] = Sub.UnFilter(ref lineBuff, ref unfilteredLine, col, bytesPerPixel);
                     }
-                    oBuff.Write(subLineBuff);
                     break;
                 case CompressionPreFilter.Up:
-                    byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Up upFilter = new Filters.Up();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        upLineBuff[col] = upFilter.UnFilter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        unfilteredLine[col] = Up.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
                     }
-                    oBuff.Write(upLineBuff);
-                    prevRowBuff.Write(upLineBuff);
                     break;
                 case CompressionPreFilter.Average:
-                    byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Average avgFilter = new Filters.Average();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        avgLineBuff[col] = avgFilter.UnFilter(ref lineBuff, ref avgLineBuff, col, BytesPerPixel);
+                        unfilteredLine[col] = Average.UnFilter(ref lineBuff, ref unfilteredLine, col, bytesPerPixel);
                     }
-                    oBuff.Write(avgLineBuff);
-                    prevRowBuff.Write(avgLineBuff);
                     break;
                 default:
-                    oBuff.Write(lineBuff);
+                    lineBuff.CopyTo(unfilteredLine, 0);
                     break;
             }
+            return unfilteredLine;
         }
 
-        private void DeCompress(Compression compression, int uncompressedSize, ref byte[]cBuff, ref byte[] oBuff) {
+        private void DeCompress(Compression compression, int uncompressedSize, ref byte[] compressedBuffer, ref byte[] decompressedBuffer) {
 
             switch (compression) {
                 case Compression.LZ4:
                     var LZ4Dec = LZ4Decoder.Create(false, uncompressedSize);
                     int decd;
-                    cBuff = new byte[uncompressedSize];
-                    LZ4Dec.DecodeAndDrain(cBuff.ToArray(), 0, uncompressedSize, oBuff, 0, uncompressedSize, out decd);
+                    compressedBuffer = new byte[uncompressedSize];
+                    LZ4Dec.DecodeAndDrain(compressedBuffer.ToArray(), 0, uncompressedSize, decompressedBuffer, 0, uncompressedSize, out decd);
                     LZ4Dec.Dispose();
                     break;
                 case Compression.ArithmeticOrder0:
                     Compressors.Arithmetic.AbstractModel arithModelOder0Coder = new Compressors.Arithmetic.ModelOrder0();
                     using (MemoryStream msUnCompress = new MemoryStream())
-                    using (MemoryStream msInput = new MemoryStream(cBuff.ToArray())) {
+                    using (MemoryStream msInput = new MemoryStream(compressedBuffer.ToArray())) {
                         arithModelOder0Coder.Process(msInput, msUnCompress, Compressors.Arithmetic.ModeE.MODE_DECODE);
                         msUnCompress.Flush();
-                        oBuff = msUnCompress.ToArray();
+                        decompressedBuffer = msUnCompress.ToArray();
                     }
                     break;
                 case Compression.ZLIB:
                     using (MemoryStream msUnCompress = new MemoryStream()) {
                         ZInputStream zs = new ZInputStream(msUnCompress);
-                        zs.Read(cBuff.ToArray());
-                        oBuff = msUnCompress.ToArray();
+                        zs.Read(compressedBuffer.ToArray());
+                        decompressedBuffer = msUnCompress.ToArray();
                     }
                     break;
                 case Compression.GZIP:
                     GZipCompressor gZipCompressor = new GZipCompressor();
-                    oBuff = gZipCompressor.Decompress(cBuff.ToArray());
+                    decompressedBuffer = gZipCompressor.Decompress(compressedBuffer.ToArray());
                     break;
                 case Compression.Brotli:
                     var bd = new BrotliDecoder();
                     int consumed, written;
-                    bd.Decompress(cBuff.ToArray(), oBuff, out consumed, out written);
+                    bd.Decompress(compressedBuffer.ToArray(), decompressedBuffer, out consumed, out written);
                     break;
                 case Compression.LZMA:
                     LZMACompressor lzmaCompressor = new LZMACompressor();
-                    cBuff = lzmaCompressor.Decompress(cBuff.ToArray());
+                    compressedBuffer = lzmaCompressor.Decompress(compressedBuffer.ToArray());
                     break;
                 case Compression.ZSTD:
                     ZstdSharp.Decompressor zstdDeCompressor = new ZstdSharp.Decompressor();
-                    oBuff = zstdDeCompressor.Unwrap(cBuff.ToArray()).ToArray();
+                    decompressedBuffer = zstdDeCompressor.Unwrap(compressedBuffer.ToArray()).ToArray();
                     break;
                 case Compression.None:
-                    oBuff = cBuff;
+                    decompressedBuffer = compressedBuffer;
                     break;
             }
         }
@@ -766,33 +685,29 @@
             switch (compressionPreFilter) {
                 case CompressionPreFilter.Paeth:
                     byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Paeth paethFilter = new Filters.Paeth();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        paethLineBuff[col] = paethFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        paethLineBuff[col] = Paeth.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(paethLineBuff);
                     break;
                 case CompressionPreFilter.Sub:
                     byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Sub subFilter = new Filters.Sub();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        subLineBuff[col] = subFilter.Filter(ref lineBuff, col, BytesPerPixel);
+                        subLineBuff[col] = Sub.Filter(ref lineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(subLineBuff);
                     break;
                 case CompressionPreFilter.Up:
                     byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Up upFilter = new Filters.Up();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        upLineBuff[col] = upFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        upLineBuff[col] = Up.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(upLineBuff);
                     break;
                 case CompressionPreFilter.Average:
                     byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                    Filters.Average avgFilter = new Filters.Average();
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        avgLineBuff[col] = avgFilter.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        avgLineBuff[col] = Average.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(avgLineBuff);
                     break;
