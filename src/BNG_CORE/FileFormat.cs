@@ -8,6 +8,7 @@
     using MemoryPack.Compression;
     using SevenZip.Buffer;
     using System;
+    using System.Diagnostics;
     using System.IO.Compression;
     using System.Reflection.Emit;
     using System.Text;
@@ -315,10 +316,16 @@
             OutputStream.SetLength(0);
             long bytesWrittenForProgress = 0;
 
+            Stopwatch sw = new();
+            sw.Start();
             for (uint Y = 0; Y < tyl; Y++) {
                 for (uint X = 0; X < txl; X++) {
                     UnpackTileToStream(ref layer, (X, Y), ref InputStream, ref OutputStream, bytesPerPixel, ref bytesWrittenForProgress);
-                    ProgressChangedEvent?.Invoke((double)bytesWrittenForProgress / (layer.Width * layer.Height * bytesPerPixel) * 100.0);
+                    var progress = (double)bytesWrittenForProgress / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
+                    if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
+                        sw.Restart();
+                        ProgressChangedEvent?.Invoke(progress);
+                    }
                 }
             }
         }
@@ -502,6 +509,32 @@
         }
 
         private (uint w, uint h) CalculateTileDimension(PixelFormat pixelFormat, BitsPerChannel bitsPerChannel) {
+            int numChannels = 0;
+            switch (pixelFormat) {
+                case PixelFormat.GRAY:
+                    numChannels = 1;
+                    break;
+                case PixelFormat.GRAYA:
+                    numChannels = 2;
+                    break;
+                case PixelFormat.RGB:
+                case PixelFormat.YCrCb:
+                case PixelFormat.CMYK:
+                    numChannels = 3;
+                    break;
+                case PixelFormat.RGBA:
+                case PixelFormat.YCrCbA:
+                    numChannels = 4;
+                    break;
+                case PixelFormat.CMYKA:
+                    numChannels = 5;
+                    break;
+            }
+            int bytesPerPixel = CalculateBitsPerPixel(pixelFormat, bitsPerChannel) / 8;
+            uint size = (uint)(4096 / bytesPerPixel);
+            return (size, size);
+
+            /*
             switch (pixelFormat) {
                 case PixelFormat.GRAY:
                 case PixelFormat.GRAYA:
@@ -545,6 +578,7 @@
                     break;
             }
             return (1024, 1024);
+            */
         }
         #endregion
 
@@ -591,6 +625,8 @@
                     Stream InputStream = new FileStream(Info.Frames[FrameID].Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
                     Info.Frames[FrameID].LayerDataOffsets[LayerID] = (ulong)OutputStream.Position;
 
+                    Stopwatch sw = new();
+                    sw.Start();
                     for (uint y = 0; y < numTilesY; y++) {
                         for (uint x = 0; x < numTilesX; x++) {
                             var corrTileSize = CalculateTileDimensionForCoordinate((Info.Frames[FrameID].Layers[LayerID].Width, Info.Frames[FrameID].Layers[LayerID].Height), tileSize, (x, y));
@@ -609,7 +645,11 @@
                             }
 
                             bytesWritten += lineBuff.LongLength * corrTileSize.h;
-                            ProgressChangedEvent?.Invoke((double)bytesWritten / InputStream.Length * 100.0);
+                            var progress = (double)bytesWritten / InputStream.Length * 100.0;
+                            if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
+                                sw.Restart();
+                                ProgressChangedEvent?.Invoke(progress);
+                            }
 
                             Info.Frames[FrameID].Layers[LayerID].TileDataOffsets[x, y] = (ulong)OutputStream.Position;
 

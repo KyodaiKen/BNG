@@ -1,5 +1,6 @@
 ﻿using BNG_CORE;
 using CommandLine;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -36,6 +37,9 @@ namespace BNG_CLI {
     }
     class Program {
         static int Main(string[] args) {
+            Stopwatch sw = new();
+            sw.Start();
+
             TextWriter Help = new StringWriter();
             Parser cmdParser = new Parser(why);
 
@@ -102,6 +106,9 @@ namespace BNG_CLI {
                         break;
                 }
             });
+
+            Console.WriteLine();
+            Console.Write(string.Format("Processing took {0}", sw.Elapsed));
 
             if (parms.Errors.Count() > 0) Console.Write(Help);
             return 0;
