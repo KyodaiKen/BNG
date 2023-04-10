@@ -365,7 +365,7 @@
                     break;
                 case CompressionPreFilter.Average:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Average.UnFilter(ref lineBuff, ref unfilteredLine, col, bytesPerPixel);
+                        unfilteredLine[col] = Average.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 default:
