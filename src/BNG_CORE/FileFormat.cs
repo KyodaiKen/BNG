@@ -279,7 +279,7 @@
                         if (tileX == txl-1 && tileY != tyl-1) {
                             tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[0, tileY + 1] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
                         } else if (tileX == txl-1 && tileY == tyl-1) {
-                            tleSzPacked = BNGFrame.HeaderOffset - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY] - (uint)BNGFrame.InitLength;
+                            tleSzPacked = BNGFrame.HeaderOffset - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
                         } else {
                             tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[tileX + 1, tileY] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
                         }
