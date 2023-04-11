@@ -98,7 +98,7 @@ namespace BNG_CLI {
                         }
 
                         BNGToDecode.ProgressChangedEvent += pChangedDec;
-                        BNGToDecode.DecodeToRaw(ref inFile, ref outFileDec, 0, 0);
+                        BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0, 0);
 
                         outFileDec.Flush();
                         outFileDec.Close();

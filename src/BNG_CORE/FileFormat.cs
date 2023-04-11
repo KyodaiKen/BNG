@@ -310,7 +310,7 @@
             }
         }
 
-        public void DecodeToRaw(ref Stream InputStream, ref Stream OutputStream, int FrameID, int LayerID) {
+        public void DecodeFrameToRaw(ref Stream InputStream, ref Stream OutputStream, int FrameID, int LayerID) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
@@ -338,6 +338,11 @@
                         ProgressChangedEvent?.Invoke(progress);
                     }
                 }
+            }
+
+            //Point to end of the header data so the next frame can be read (if there are any)
+            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.WEB_OPTIMIZED)) {
+                InputStream.Seek((long)BNGFrame.HeaderLength, SeekOrigin.Current);
             }
         }
 
