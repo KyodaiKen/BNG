@@ -26,7 +26,7 @@
             return (byte)(cLine[col] + Predictor(ref cLine, ref pLine, col, BytesPerPixel));
         }
         private static int Predictor(ref byte[] cLine, ref byte[] pLine, long col, int BytesPerPixel) {
-            return (int)Math.Floor((double)((col - BytesPerPixel) < 0 ? 0 : cLine[col - BytesPerPixel] + (col - BytesPerPixel) < 0 ? 0 : pLine[col - BytesPerPixel] / 2d));
+            return (int)Math.Floor((((col - BytesPerPixel) < 0 ? 0 : cLine[col - BytesPerPixel]) + pLine[col]) / 2d);
         }
     }
 

@@ -22,8 +22,10 @@ namespace BNG_CLI {
         public uint SrcHeight { get; set; } = 0;
         [Option('p', "src-pix-fmt", Required = false, HelpText = "Source pixel format", Default = PixelFormat.RGB)]
         public PixelFormat PixFmt { get; set; } = PixelFormat.RGB;
-        [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel", Default = BitsPerChannel.BPC_UInt8)]
-        public BitsPerChannel BPC { get; set; } = BitsPerChannel.BPC_UInt8;
+        [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel", Default = (uint)8)]
+        public uint BPC { get; set; } = 8;
+        [Option('d', "src-channel-data-format", Required = false, HelpText = "Source channel data format (IntegerUnsigned, IntegerSigned, FloatIEEE)", Default = PixelChannelDataType.IntegerUnsigned)]
+        public PixelChannelDataType PixelChannelDataType { get; set; } = PixelChannelDataType.IntegerUnsigned;
         [Option("src-res-h", Required = false, HelpText = "Source horizontal resolution in dpi", Default = 72)]
         public double SrcResolutionH { get; set; } = 72;
         [Option("src-res-v", Required = false, HelpText = "Source vertical resolution in dpi", Default = 72)]
@@ -45,7 +47,7 @@ namespace BNG_CLI {
 
             Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en-us");
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-us");
-            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            Console.OutputEncoding = Encoding.UTF8;
 
             void why(ParserSettings fy) {
                 fy.HelpWriter = Help;
@@ -57,17 +59,18 @@ namespace BNG_CLI {
                 switch (o.Task) {
                     case Task.Encode:
                         Bitmap BNG = new Bitmap(o.InputFile, new RAWImportParameters() {
-                            SourceDimensions = (o.SrcWidth, o.SrcHeight)
+                          SourceDimensions = (o.SrcWidth, o.SrcHeight)
                         , SourcePixelFormat = o.PixFmt
                         , TargetPixelFormat = o.PixFmt
                         , SourceBitsPerChannel = o.BPC
                         , TargetBitsPerChannel = o.BPC
+                        , SourceDataType = o.PixelChannelDataType
+                        , TargetDataType = o.PixelChannelDataType
                         , Resolution = (o.SrcResolutionH, o.SrcResolutionV)
                         , CompressionPreFilter = o.CompressionFilter
                         , Compression = o.Compression
                         , CompressionLevel = o.CompressionLevel
                         });
-
 
                         void pChanged(double progress) {
                             Console.CursorLeft = 0;
@@ -77,7 +80,7 @@ namespace BNG_CLI {
                         BNG.ProgressChangedEvent += pChanged;
 
                         Stream outFile = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
-                        BNG.WriteBitmapFile(ref outFile);
+                        BNG.WriteBNGFrame(ref outFile);
                         outFile.Close();
                         outFile.Dispose();
                         break;

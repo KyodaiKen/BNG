@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-t Encode -i rgba32.data -o rgba32_compressed.bng -w 6000 -h 6000 -p RGBA -f Paeth -c Brotli -l 9",
+      "commandLineArgs": "-t Decode -i film.bng -o film_decompressed.data",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }
