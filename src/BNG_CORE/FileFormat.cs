@@ -110,6 +110,8 @@
         public int InitLength { get; set; }
         [MemoryPackIgnore]
         public ulong DataStartOffset { get; set; }
+        [MemoryPackIgnore]
+        public ulong DataLength { get; set; }
         public uint Width { get; set; } = 0;
         public uint Height { get; set; } = 0;
         public double ResolutionH { get; set; }
@@ -202,6 +204,7 @@
                     var decompressedBuffer = decompressor.Decompress(binaryHeader);
                     BNGFrame = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
                 }
+
                 BNGFrame.DataStartOffset = (ulong)InputStream.Position; //Data length is in the header
                 BNGFrame.HeaderLength = (ulong)binaryHeader.LongLength;
                 BNGFrame.HeaderOffset = 12;
@@ -257,26 +260,26 @@
                 log.AppendLine(string.Format("Base tile dimension W: {0}", BNGFrame.Layers[layer].BaseTileDimension.w));
                 log.AppendLine(string.Format("Base tile dimension H: {0}", BNGFrame.Layers[layer].BaseTileDimension.h));
                 log.AppendLine(string.Format("Data start offset....: {0}", BNGFrame.LayerDataOffsets[layer]));
-                log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= BNGFrame.Layers.Count ? 0 - BNGFrame.LayerDataOffsets[layer] : BNGFrame.LayerDataOffsets[layer+1]) - BNGFrame.LayerDataOffsets[layer]));
-                log.AppendLine(string.Format("Uncompressed size (\"): {0}", BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8));
-                log.AppendLine(string.Format("Number of tiles......: {0}", BNGFrame.Layers[layer].TileDataOffsets.LongLength));
 
                 var txl = BNGFrame.Layers[layer].TileDataOffsets.GetLongLength(0);
                 var tyl = BNGFrame.Layers[layer].TileDataOffsets.GetLongLength(1);
                 BNGFrame.Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl];
                 BNGFrame.Layers[layer].TileDataLengths = new ulong[txl, tyl];
 
+                StringBuilder tileInfo = new StringBuilder();
+
+                ulong tileDataLength = 0;
                 for (uint tileY = 0; tileY < tyl; tileY++) {
                     for (uint tileX = 0; tileX < txl; tileX++) {
                         string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
-                        log.Append(tleNum);
-                        log.AppendLine(new string('-', 40 - tleNum.Length));
+                        tileInfo.Append(tleNum);
+                        tileInfo.AppendLine(new string('-', 40 - tleNum.Length));
                         ulong tleWzUnPacked = 0;
                         ulong tleSzPacked = 0;
                         if (tileX == txl-1 && tileY != tyl-1) {
                             tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[0, tileY + 1] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
                         } else if (tileX == txl-1 && tileY == tyl-1) {
-                            tleSzPacked = (ulong)InputStream.Length - BNGFrame.HeaderLength - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
+                            tleSzPacked = BNGFrame.HeaderOffset - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY] - (uint)BNGFrame.InitLength;
                         } else {
                             tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[tileX + 1, tileY] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
                         }
@@ -285,12 +288,25 @@
                             , (BNGFrame.Layers[layer].BaseTileDimension.w, BNGFrame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
                         BNGFrame.Layers[layer].TileDimensions[tileX, tileY] = corrTileSize;
                         tleWzUnPacked = (ulong)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8);
-                        log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
-                        log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
-                        log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
-                        log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
+                        tileInfo.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
+                        tileInfo.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
+                        tileInfo.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
+                        tileInfo.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
+                        tileDataLength += tleSzPacked;
                     }
                 }
+
+                log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= BNGFrame.Layers.Count ? tileDataLength : BNGFrame.LayerDataOffsets[layer + 1]) - BNGFrame.LayerDataOffsets[layer]));
+                log.AppendLine(string.Format("Uncompressed size (\"): {0}", BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8));
+                log.AppendLine(string.Format("Number of tiles......: {0}", BNGFrame.Layers[layer].TileDataOffsets.LongLength));
+                log.Append(tileInfo.ToString());
+
+                BNGFrame.DataLength = tileDataLength;
+            }
+
+            //Point stream to the start of the tile data
+            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.WEB_OPTIMIZED)) {
+                InputStream.Position -= (long)(BNGFrame.HeaderOffset + BNGFrame.HeaderLength) - BNGFrame.InitLength;
             }
         }
 
@@ -307,7 +323,7 @@
             var tyl = layer.TileDataOffsets.GetLongLength(1);
             var bytesPerPixel = CalculateBitsPerPixel(layer.PixelFormat, layer.BitsPerChannel) / 8;
 
-            InputStream.Position -= (long)(BNGFrame.HeaderOffset + BNGFrame.HeaderLength) - BNGFrame.InitLength;
+
             OutputStream.SetLength(0);
             long bytesWrittenForProgress = 0;
 
