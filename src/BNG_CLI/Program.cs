@@ -445,6 +445,8 @@ namespace BNG_CLI {
             switch (p.Task) {
                 case Task.Encode:
                     Stream outFile = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
+                    outFile.SetLength(0);
+
                     string fil = p.InputFiles.Count > 1 ? "{0} files given " : "1 file given ";
                     Console.WriteLine(string.Format(fil + "--------------------------------", p.InputFiles.Count));
                     Bitmap BNG = new Bitmap();

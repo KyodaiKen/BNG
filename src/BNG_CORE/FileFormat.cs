@@ -529,7 +529,12 @@
             Frame.LayerDataLengths = new ulong[Frame.Layers.Count];
 
             Stream oStream = OutputStream; //No optimization, just write through
-
+            //Determine wether to use memory stream or the file stream provided.
+            if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && optimizeInMemory) {
+                oStream = new MemoryStream();
+            } else if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
+                oStream = new FileStream(TempFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 0x800000, FileOptions.RandomAccess);
+            }
 
             for (int LayerID = 0; LayerID < Frame.Layers.Count; LayerID++) {
                 var BytesPerPixel = Frame.Layers[LayerID].BitsPerPixel / 8;
@@ -542,13 +547,6 @@
                 Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
 
                 Stream InputStream = new FileStream(Frame.Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
-
-                //Determine wether to use memory stream or the file stream provided.
-                if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && optimizeInMemory) {
-                    oStream = new MemoryStream();
-                } else if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
-                    oStream = new FileStream(TempFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 0x800000, FileOptions.RandomAccess);
-                }
 
                 Stopwatch sw = new();
                 sw.Start();
