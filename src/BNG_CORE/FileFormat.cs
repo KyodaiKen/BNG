@@ -10,8 +10,8 @@
 
     [Flags]
     public enum BNG_FLAGS : byte {
-        WEB_OPTIMIZED = 1,
-        TEST = 8
+        STREAMING_OPTIMIZED = 1,
+        COMPRESSED_HEADER = 2
     }
     public enum LayerBlendMode : byte {
         Normal   = 0x00,
@@ -140,6 +140,8 @@
         public (uint x, uint y) Offset { get; set; } = (0, 0);
         public double Opacity { get; set; } = 1.0;
         public LayerBlendMode BlendMode { get; set; } = LayerBlendMode.Normal;
+        public BNG_FLAGS Flags { get; set;} = 0;
+        public float MaxRepackMemoryPercentage { get; set; }
     }
 
     public class RAWImportParameters : ImportParameters {
@@ -196,7 +198,7 @@
             long dataStartPosition = 0;
 
             //Check for web optimized header
-            if (BNGFrame.Flags.HasFlag(BNG_FLAGS.WEB_OPTIMIZED)) {
+            if (BNGFrame.Flags.HasFlag(BNG_FLAGS.STREAMING_OPTIMIZED)) {
                 //Web optimized format
                 //Try to read the header
                 byte[] binaryHeader = new byte[headerLengthOrOffset]; //This is now the header size
@@ -224,9 +226,13 @@
                 InputStream.Seek((long)headerLengthOrOffset - 16, SeekOrigin.Current);
                 InputStream.Read(binaryHeader);
 
-                using (var decompressor = new BrotliDecompressor()) {
-                    var decompressedBuffer = decompressor.Decompress(binaryHeader);
-                    BNGFrame = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                if (BNGFrame.Flags.HasFlag(BNG_FLAGS.COMPRESSED_HEADER)) {
+                    using (var decompressor = new BrotliDecompressor()) {
+                        var decompressedBuffer = decompressor.Decompress(binaryHeader);
+                        BNGFrame = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                    }
+                } else {
+                    BNGFrame = MemoryPackSerializer.Deserialize<Header>(binaryHeader);
                 }
 
                 BNGFrame.DataStartOffset = (ulong)dataStartPosition;
@@ -300,7 +306,7 @@
             }
 
             //Point stream to the start of the tile data
-            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.WEB_OPTIMIZED)) {
+            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.STREAMING_OPTIMIZED)) {
                 InputStream.Position -= (long)(BNGFrame.HeaderOffset + BNGFrame.HeaderLength) - BNGFrame.InitLength;
             }
         }
@@ -336,7 +342,7 @@
             }
 
             //Point to end of the header data so the next frame can be read (if there are any)
-            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.WEB_OPTIMIZED)) {
+            if (!BNGFrame.Flags.HasFlag(BNG_FLAGS.STREAMING_OPTIMIZED)) {
                 InputStream.Seek((long)BNGFrame.HeaderLength, SeekOrigin.Current);
             }
         }
@@ -462,7 +468,6 @@
 
             //Info byte
             BNGFrame.Version = 0;
-            BNGFrame.Flags = BNG_FLAGS.TEST;
             byte version = BNGFrame.Version;
             byte flags = (byte)BNGFrame.Flags;
             byte infoByte = (byte)(version << 4 | flags);
@@ -531,8 +536,8 @@
 
             //Serialize the metadata and then compress it using Brotli
             byte[] headerData;
-            if (1 == 1) {
-                var Compressor = new MemoryPack.Compression.BrotliCompressor(11, 24);
+            if (BNGFrame.Flags.HasFlag(BNG_FLAGS.COMPRESSED_HEADER)) {
+                var Compressor = new BrotliCompressor(11, 24);
                 MemoryPackSerializer.Serialize(Compressor, BNGFrame);
                 headerData = Compressor.ToArray();
                 Compressor.Dispose();
@@ -620,6 +625,7 @@
         public ulong PrepareRAWFileToLayer(string RAWFileName, RAWImportParameters ImportParameters) {
             BNGFrame.Width = ImportParameters.SourceDimensions.w;
             BNGFrame.Height = ImportParameters.SourceDimensions.h;
+            BNGFrame.Flags = ImportParameters.Flags;
 
             var newLayer = new Layer();
 

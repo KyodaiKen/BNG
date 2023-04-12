@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-t Decode -i gauntlets-gigapixel-32000x13956xRGB24.bng -o gauntlets-gigapixel-32000x13956xRGB24_decompressed.data",
+      "commandLineArgs": "-t Encode -i gauntlets-gigapixel-32000x13956xRGB24.data -o gauntlets-gigapixel-32000x13956xRGB24.bng -w 32000 -h 13956 -l 0 -c Brotli",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

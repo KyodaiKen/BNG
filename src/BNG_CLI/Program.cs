@@ -36,6 +36,13 @@ namespace BNG_CLI {
         public CompressionPreFilter CompressionFilter { get; set; } = CompressionPreFilter.Paeth;
         [Option('l', "level", Required = false, HelpText = "Compression level", Default = 8)]
         public int CompressionLevel { get; set; } = 8;
+
+        [Option("uncompressed-header", Required = false, HelpText = "Disable header compression")]
+        public bool UncompressedHeader { get; set; }
+        [Option("optimize-streaming", Required = false, HelpText = "Optimize for streaming. Repacks the file and puts the headers at the beginning of each frame.")]
+        public bool OptimizeStreaming { get; set; }
+        [Option("repack-in-memory", Required = false, HelpText = "Repacks each frame of the output file in memory. Enter the maximum memory percantage to be used. If it would be exceeded, file repacking is used.", Default = 65)]
+        public float RepackInRAM { get; set; }
     }
     class Program {
         static int Main(string[] args) {
@@ -70,6 +77,8 @@ namespace BNG_CLI {
                         , CompressionPreFilter = o.CompressionFilter
                         , Compression = o.Compression
                         , CompressionLevel = o.CompressionLevel
+                        , Flags = (o.OptimizeStreaming ? BNG_FLAGS.STREAMING_OPTIMIZED : 0) | (o.UncompressedHeader ? 0 : BNG_FLAGS.COMPRESSED_HEADER)
+                        , MaxRepackMemoryPercentage = o.RepackInRAM
                         });
 
                         void pChanged(double progress) {
