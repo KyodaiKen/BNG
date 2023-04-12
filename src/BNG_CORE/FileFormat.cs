@@ -7,7 +7,6 @@
     using System.IO.Compression;
     using System.Text;
     using ZstdSharp;
-    using ZstdSharp.Unsafe;
 
     [Flags]
     public enum Flags : byte {
@@ -16,9 +15,9 @@
     }
     public enum LayerBlendMode : byte {
         Normal   = 0x00,
-        Replace  = 0x00,
         Multiply = 0x01,
-        Divide   = 0x02
+        Divide   = 0x02,
+        Subtract = 0x03
     }
 
     public enum CompressionPreFilter : byte {
@@ -37,7 +36,7 @@
         ZSTD   = 16
     }
 
-    public enum PixelFormat : byte {
+    public enum ColorSpace : byte {
         GRAY   = 0x10,
         GRAYA  = 0xA1,
         RGB    = 0x0B,
@@ -48,7 +47,7 @@
         YCrCbA = 0xAF
     }
 
-    public enum PixelChannelDataType : byte {
+    public enum PixelFormat : byte {
         IntegerUnsigned = 0xA0,
         IntegerSigned   = 0xA1,
         FloatIEEE       = 0xF0
@@ -67,9 +66,9 @@
         public string SourceFileName { get; set; } = string.Empty;
         public string Name { get; set; } = "layer";
         public string Description { get; set; } = string.Empty;
-        public PixelFormat PixelFormat { get; set; } = PixelFormat.RGB;
+        public ColorSpace ColorSpace { get; set; } = ColorSpace.RGB;
         public uint BitsPerChannel { get; set; } = 8;
-        public PixelChannelDataType PixelChannelDataType { get; set; } = PixelChannelDataType.IntegerUnsigned;
+        public PixelFormat PixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
         [MemoryPackIgnore]
         public int NumChannels { get; set; } = 3;
         [MemoryPackIgnore]
@@ -100,7 +99,7 @@
     }
 
     [MemoryPackable]
-    public partial class Header {
+    public partial class FrameHeader {
         [MemoryPackIgnore]
         public Flags Flags { get; set; }
         [MemoryPackIgnore]
@@ -115,6 +114,16 @@
         public ulong DataStartOffset { get; set; }
         [MemoryPackIgnore]
         public ulong DataLength { get; set; }
+        [MemoryPackIgnore]
+        public ulong[] LayerDataOffsets { get; set; }
+        [MemoryPackIgnore]
+        public float TileSizeFactor { get; set; } = 1;
+        [MemoryPackIgnore]
+        public float MaxRepackMemoryPercentage { get; set; } = 80;
+
+
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
         public uint Width { get; set; } = 0;
         public uint Height { get; set; } = 0;
         public double ResolutionH { get; set; }
@@ -123,19 +132,13 @@
         public List<DataBlock>? Metadata { get; set; }
         public ulong[] LayerDataLengths { get; set; }
         public List<Layer>? Layers { get; set; }
-        [MemoryPackIgnore]
-        public ulong[] LayerDataOffsets { get; set; }
-        [MemoryPackIgnore]
-        public float TileSizeFactor { get; set; } = 1;
-        [MemoryPackIgnore]
-        public float MaxRepackMemoryPercentage { get; set; } = 80;
     }
 
 
     public partial class ImportParameters {
-        public PixelFormat TargetPixelFormat { get; set; } = PixelFormat.RGB;
+        public ColorSpace TargetColorSpace { get; set; } = ColorSpace.RGB;
         public uint TargetBitsPerChannel { get; set; } = 8;
-        public PixelChannelDataType TargetDataType { get; set; } = PixelChannelDataType.IntegerUnsigned;
+        public PixelFormat TargetDataType { get; set; } = PixelFormat.IntegerUnsigned;
         public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Up;
         public Compression Compression { get; set; } = Compression.Brotli;
         public int CompressionLevel { get; set; } = 6;
@@ -143,10 +146,13 @@
         public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
         public string LayerName { get; set; } = string.Empty;
         public string LayerDescription { get; set; } = string.Empty;
-        public double DisplayTime { get; set; } = 0.0;
-        public (uint x, uint y) Offset { get; set; } = (0, 0);
-        public double Opacity { get; set; } = 1.0;
-        public LayerBlendMode BlendMode { get; set; } = LayerBlendMode.Normal;
+        public long LayerBelongsToFrameNum { get; set; } = -1;
+        public string FrameName { get; set; } = string.Empty;
+        public string FrameDescription { get; set; } = string.Empty;
+        public double FrameDuration { get; set; } = 1 / 15;
+        public (uint x, uint y) LayerOffset { get; set; } = (0, 0);
+        public double LayerOpacity { get; set; } = 1.0;
+        public LayerBlendMode LayerBlendMode { get; set; } = LayerBlendMode.Normal;
         public Flags Flags { get; set;} = 0;
         public float MaxRepackMemoryPercentage { get; set; }
         public float TileSizeFactor { get; set; } = 1;
@@ -154,13 +160,13 @@
 
     public class RAWImportParameters : ImportParameters {
         public (uint w, uint h) SourceDimensions { get; set; }
-        public PixelFormat SourcePixelFormat { get; set; } = PixelFormat.RGB;
+        public ColorSpace SourceColorSpace { get; set; } = ColorSpace.RGB;
         public uint SourceBitsPerChannel { get; set; } = 8;
-        public PixelChannelDataType SourceDataType { get; set; } = PixelChannelDataType.IntegerUnsigned;
+        public PixelFormat SourcePixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
     }
 
     public class Bitmap : IDisposable {
-        private Header BNGFrame;
+        private FrameHeader Frame;
         private bool disposedValue;
 
         public bool Strict { get; set; } = false;
@@ -169,7 +175,7 @@
         public dgProgressChanged ProgressChangedEvent { get; set; }
 
         public Bitmap() {
-            BNGFrame = new Header();
+            Frame = new FrameHeader();
         }
 
         #region Loading
@@ -189,9 +195,9 @@
 
             //Read the info byte
             byte infoByte = (byte)InputStream.ReadByte();
-            BNGFrame.Flags = new();
-            BNGFrame.Version = (byte)(infoByte >> 4);
-            BNGFrame.Flags = (Flags)(infoByte & 0x0F);
+            Frame.Flags = new();
+            Frame.Version = (byte)(infoByte >> 4);
+            Frame.Flags = (Flags)(infoByte & 0x0F);
 
             if (ident != identCompare) {
                 if(Strict) throw new InvalidDataException("This is not a BNG file!");
@@ -202,7 +208,7 @@
             long dataStartPosition = 0;
 
             //Check for web optimized header
-            if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
+            if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
                 //Web optimized format
                 byte[] readHeaderLength = new byte[4];
                 InputStream.Read(readHeaderLength);
@@ -213,13 +219,13 @@
 
                 using (var decompressor = new BrotliDecompressor()) {
                     var decompressedBuffer = decompressor.Decompress(binaryHeader);
-                    BNGFrame = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                    Frame = MemoryPackSerializer.Deserialize<FrameHeader>(decompressedBuffer);
                 }
 
-                BNGFrame.DataStartOffset = (ulong)InputStream.Position; //Data length is in the header
-                BNGFrame.HeaderLength = (ulong)binaryHeader.LongLength;
-                BNGFrame.HeaderOffset = 8;
-                BNGFrame.InitLength = 8;
+                Frame.DataStartOffset = (ulong)InputStream.Position; //Data length is in the header
+                Frame.HeaderLength = (ulong)binaryHeader.LongLength;
+                Frame.HeaderOffset = 8;
+                Frame.InitLength = 8;
             }
             else 
             {
@@ -238,78 +244,78 @@
                 InputStream.Seek((long)headerLengthOrOffset - 16, SeekOrigin.Current);
                 InputStream.Read(binaryHeader);
 
-                if (BNGFrame.Flags.HasFlag(Flags.COMPRESSED_HEADER)) {
+                if (Frame.Flags.HasFlag(Flags.COMPRESSED_HEADER)) {
                     using (var decompressor = new BrotliDecompressor()) {
                         var decompressedBuffer = decompressor.Decompress(binaryHeader);
-                        BNGFrame = MemoryPackSerializer.Deserialize<Header>(decompressedBuffer);
+                        Frame = MemoryPackSerializer.Deserialize<FrameHeader>(decompressedBuffer);
                     }
                 } else {
-                    BNGFrame = MemoryPackSerializer.Deserialize<Header>(binaryHeader);
+                    Frame = MemoryPackSerializer.Deserialize<FrameHeader>(binaryHeader);
                 }
 
-                BNGFrame.DataStartOffset = (ulong)dataStartPosition;
-                BNGFrame.HeaderLength = BitConverter.ToUInt32(readHeaderLength);
-                BNGFrame.HeaderOffset = headerLengthOrOffset;
-                BNGFrame.InitLength = 16;
+                Frame.DataStartOffset = (ulong)dataStartPosition;
+                Frame.HeaderLength = BitConverter.ToUInt32(readHeaderLength);
+                Frame.HeaderOffset = headerLengthOrOffset;
+                Frame.InitLength = 16;
             }
 
             //Update those fields again as they got overwritten by reading the header
-            BNGFrame.Version = (byte)(infoByte >> 4);
-            BNGFrame.Flags = (Flags)(infoByte & 0x0F);
+            Frame.Version = (byte)(infoByte >> 4);
+            Frame.Flags = (Flags)(infoByte & 0x0F);
 
-            log.AppendLine(string.Format("BNG Frame Version....: {0}", BNGFrame.Version));
-            log.AppendLine(string.Format("Width................: {0}", BNGFrame.Width));
-            log.AppendLine(string.Format("Height...............: {0}", BNGFrame.Height));
-            log.AppendLine(string.Format("Display time (sec)...: {0}", BNGFrame.DisplayTime));
-            log.AppendLine(string.Format("Horizontal resolution: {0}", BNGFrame.ResolutionH));
-            log.AppendLine(string.Format("Vertical resolution..: {0}", BNGFrame.ResolutionV));
-            log.AppendLine(string.Format("Number of layers.....: {0}", BNGFrame.Layers.Count));
+            log.AppendLine(string.Format("BNG Frame Version....: {0}", Frame.Version));
+            log.AppendLine(string.Format("Width................: {0}", Frame.Width));
+            log.AppendLine(string.Format("Height...............: {0}", Frame.Height));
+            log.AppendLine(string.Format("Display time (sec)...: {0}", Frame.DisplayTime));
+            log.AppendLine(string.Format("Horizontal resolution: {0}", Frame.ResolutionH));
+            log.AppendLine(string.Format("Vertical resolution..: {0}", Frame.ResolutionV));
+            log.AppendLine(string.Format("Number of layers.....: {0}", Frame.Layers.Count));
 
-            BNGFrame.LayerDataOffsets = new ulong[BNGFrame.Layers.Count];
+            Frame.LayerDataOffsets = new ulong[Frame.Layers.Count];
 
-            for (int layer = 0; layer < BNGFrame.Layers.Count;  layer++) {
+            for (int layer = 0; layer < Frame.Layers.Count;  layer++) {
                 string lyrNum = string.Format("Layer {0}", layer) + " ";
-                BNGFrame.LayerDataOffsets[layer] += BNGFrame.LayerDataLengths[layer];
+                Frame.LayerDataOffsets[layer] += Frame.LayerDataLengths[layer];
                 log.Append(lyrNum);
                 log.AppendLine(new string('-', 40 - lyrNum.Length));
-                log.AppendLine(string.Format("Layer name...........: {0}", BNGFrame.Layers[layer].Name));
-                log.AppendLine(string.Format("Layer description....: {0}", BNGFrame.Layers[layer].Description));
-                log.AppendLine(string.Format("Offset X.............: {0}", BNGFrame.Layers[layer].OffsetX));
-                log.AppendLine(string.Format("Offset Y.............: {0}", BNGFrame.Layers[layer].OffsetY));
-                log.AppendLine(string.Format("Width................: {0}", BNGFrame.Layers[layer].Width));
-                log.AppendLine(string.Format("Height...............: {0}", BNGFrame.Layers[layer].Height));
-                log.AppendLine(string.Format("Opacity..............: {0}", BNGFrame.Layers[layer].Opacity));
-                log.AppendLine(string.Format("Pixel format.........: {0}", BNGFrame.Layers[layer].PixelFormat.ToString()));
-                log.AppendLine(string.Format("Bits per channel.....: {0}", BNGFrame.Layers[layer].BitsPerChannel));
-                log.AppendLine(string.Format("Channel data format..: {0}", BNGFrame.Layers[layer].PixelChannelDataType.ToString()));
-                log.AppendLine(string.Format("Compression..........: {0}", BNGFrame.Layers[layer].Compression.ToString()));
-                log.AppendLine(string.Format("Pre-filter...........: {0}", BNGFrame.Layers[layer].CompressionPreFilter.ToString()));
-                log.AppendLine(string.Format("Base tile dimension W: {0}", BNGFrame.Layers[layer].BaseTileDimension.w));
-                log.AppendLine(string.Format("Base tile dimension H: {0}", BNGFrame.Layers[layer].BaseTileDimension.h));
-                log.AppendLine(string.Format("Data offset..........: {0}", BNGFrame.LayerDataOffsets[layer]));
-                log.AppendLine(string.Format("Data size (bytes)....: {0}", BNGFrame.LayerDataLengths[layer]));
-                log.AppendLine(string.Format("Uncompressed size (\"): {0}", BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8));
-                log.AppendLine(string.Format("Number of tiles......: {0}", BNGFrame.Layers[layer].TileDataLengths.LongLength));
+                log.AppendLine(string.Format("Layer name...........: {0}", Frame.Layers[layer].Name));
+                log.AppendLine(string.Format("Layer description....: {0}", Frame.Layers[layer].Description));
+                log.AppendLine(string.Format("Offset X.............: {0}", Frame.Layers[layer].OffsetX));
+                log.AppendLine(string.Format("Offset Y.............: {0}", Frame.Layers[layer].OffsetY));
+                log.AppendLine(string.Format("Width................: {0}", Frame.Layers[layer].Width));
+                log.AppendLine(string.Format("Height...............: {0}", Frame.Layers[layer].Height));
+                log.AppendLine(string.Format("Opacity..............: {0}", Frame.Layers[layer].Opacity));
+                log.AppendLine(string.Format("Pixel format.........: {0}", Frame.Layers[layer].ColorSpace.ToString()));
+                log.AppendLine(string.Format("Bits per channel.....: {0}", Frame.Layers[layer].BitsPerChannel));
+                log.AppendLine(string.Format("Channel data format..: {0}", Frame.Layers[layer].PixelFormat.ToString()));
+                log.AppendLine(string.Format("Compression..........: {0}", Frame.Layers[layer].Compression.ToString()));
+                log.AppendLine(string.Format("Pre-filter...........: {0}", Frame.Layers[layer].CompressionPreFilter.ToString()));
+                log.AppendLine(string.Format("Base tile dimension W: {0}", Frame.Layers[layer].BaseTileDimension.w));
+                log.AppendLine(string.Format("Base tile dimension H: {0}", Frame.Layers[layer].BaseTileDimension.h));
+                log.AppendLine(string.Format("Data offset..........: {0}", Frame.LayerDataOffsets[layer]));
+                log.AppendLine(string.Format("Data size (bytes)....: {0}", Frame.LayerDataLengths[layer]));
+                log.AppendLine(string.Format("Uncompressed size (\"): {0}", Frame.Layers[layer].Width * Frame.Layers[layer].Height * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8));
+                log.AppendLine(string.Format("Number of tiles......: {0}", Frame.Layers[layer].TileDataLengths.LongLength));
 
-                var txl = BNGFrame.Layers[layer].TileDataLengths.GetLongLength(0);
-                var tyl = BNGFrame.Layers[layer].TileDataLengths.GetLongLength(1);
-                BNGFrame.Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl];
-                BNGFrame.Layers[layer].TileDataOffsets = new ulong[txl, tyl];
+                var txl = Frame.Layers[layer].TileDataLengths.GetLongLength(0);
+                var tyl = Frame.Layers[layer].TileDataLengths.GetLongLength(1);
+                Frame.Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl];
+                Frame.Layers[layer].TileDataOffsets = new ulong[txl, tyl];
 
                 StringBuilder tileInfo = new StringBuilder();
 
                 for (uint tileY = 0; tileY < tyl; tileY++) {
                     for (uint tileX = 0; tileX < txl; tileX++) {
-                        BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY] += BNGFrame.Layers[layer].TileDataLengths[tileX, tileY];
+                        Frame.Layers[layer].TileDataOffsets[tileX, tileY] += Frame.Layers[layer].TileDataLengths[tileX, tileY];
                         string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
                         log.Append(tleNum);
                         log.AppendLine(new string('-', 40 - tleNum.Length));
-                        ulong tleSzPacked = BNGFrame.Layers[layer].TileDataLengths[tileX, tileY];
-                        BNGFrame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
-                        var corrTileSize = CalculateTileDimensionForCoordinate((BNGFrame.Layers[layer].Width, BNGFrame.Layers[layer].Height)
-                            , (BNGFrame.Layers[layer].BaseTileDimension.w, BNGFrame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
-                        BNGFrame.Layers[layer].TileDimensions[tileX, tileY] = corrTileSize;
-                        uint tleWzUnPacked = (uint)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8);
+                        ulong tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
+                        Frame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
+                        var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[layer].Width, Frame.Layers[layer].Height)
+                            , (Frame.Layers[layer].BaseTileDimension.w, Frame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
+                        Frame.Layers[layer].TileDimensions[tileX, tileY] = corrTileSize;
+                        uint tleWzUnPacked = (uint)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8);
                         log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
                         log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
                         log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
@@ -317,12 +323,12 @@
                     }
                 }
 
-                BNGFrame.DataLength += BNGFrame.LayerDataLengths[layer];
+                Frame.DataLength += Frame.LayerDataLengths[layer];
             }
 
             //Point stream to the start of the tile data
-            if (!BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
-                InputStream.Position -= (long)(BNGFrame.HeaderOffset + BNGFrame.HeaderLength) - BNGFrame.InitLength;
+            if (!Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
+                InputStream.Position -= (long)(Frame.HeaderOffset + Frame.HeaderLength) - Frame.InitLength;
             }
         }
 
@@ -334,10 +340,10 @@
             if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
 
-            var layer = BNGFrame.Layers[LayerID];
+            var layer = Frame.Layers[LayerID];
             var txl = layer.TileDataOffsets.GetLongLength(0);
             var tyl = layer.TileDataOffsets.GetLongLength(1);
-            var bytesPerPixel = CalculateBitsPerPixel(layer.PixelFormat, layer.BitsPerChannel) / 8;
+            var bytesPerPixel = CalculateBitsPerPixel(layer.ColorSpace, layer.BitsPerChannel) / 8;
 
 
             OutputStream.SetLength(0);
@@ -357,8 +363,8 @@
             }
 
             //Point to end of the header data so the next frame can be read (if there are any)
-            if (!BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
-                InputStream.Seek((long)BNGFrame.HeaderLength, SeekOrigin.Current);
+            if (!Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
+                InputStream.Seek((long)Frame.HeaderLength, SeekOrigin.Current);
             }
         }
 
@@ -434,25 +440,25 @@
         #endregion
 
         #region Helpers
-        private int CalculateBitsPerPixel(PixelFormat pixelFormat, uint bitsPerChannel) {
+        private int CalculateBitsPerPixel(ColorSpace pixelFormat, uint bitsPerChannel) {
             switch (pixelFormat) {
-                case PixelFormat.GRAY:
+                case ColorSpace.GRAY:
                     return (int)bitsPerChannel;
-                case PixelFormat.GRAYA:
+                case ColorSpace.GRAYA:
                     return (int)bitsPerChannel * 2;
-                case PixelFormat.RGB:
-                case PixelFormat.YCrCb:
+                case ColorSpace.RGB:
+                case ColorSpace.YCrCb:
                     return (int)bitsPerChannel * 3;
-                case PixelFormat.RGBA:
-                case PixelFormat.CMYK:
+                case ColorSpace.RGBA:
+                case ColorSpace.CMYK:
                     return (int)bitsPerChannel * 4;
-                case PixelFormat.CMYKA:
+                case ColorSpace.CMYKA:
                     return (int)bitsPerChannel * 5;
                 default: return (int)bitsPerChannel;
             }
         }
 
-        private (uint w, uint h) CalculateTileDimension(PixelFormat pixelFormat, uint bitsPerChannel, float tileSizeMult) {
+        private (uint w, uint h) CalculateTileDimension(ColorSpace pixelFormat, uint bitsPerChannel, float tileSizeMult) {
             int bytesPerPixel = CalculateBitsPerPixel(pixelFormat, bitsPerChannel) / 8;
             float maxSize = tileSizeMult * 4096f;
             uint size = (uint)(maxSize / bytesPerPixel);
@@ -466,16 +472,16 @@
 
         #region Writing
         public Bitmap(string ImportFileName, ImportParameters Options) {
-            BNGFrame = new Header();
+            Frame = new FrameHeader();
             AddLayer(ImportFileName, Options);
         }
 
         public void AddLayer(string ImportFileName, ImportParameters Options) {
-            BNGFrame.Layers ??= new();
+            Frame.Layers ??= new();
             PrepareRAWFileToLayer(ImportFileName, (RAWImportParameters)Options);
         }
         public void WriteBNGFrame(ref Stream OutputStream) {
-            if (BNGFrame == null) throw new NullReferenceException(nameof(BNGFrame));
+            if (Frame == null) throw new NullReferenceException(nameof(Frame));
             if (OutputStream == null) throw new ArgumentNullException(nameof(File));
             if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
@@ -487,9 +493,9 @@
             OutputStream.Write(Encoding.ASCII.GetBytes("BNG"));
 
             //Info byte
-            BNGFrame.Version = 0;
-            byte version = BNGFrame.Version;
-            byte flags = (byte)BNGFrame.Flags;
+            Frame.Version = 0;
+            byte version = Frame.Version;
+            byte flags = (byte)Frame.Flags;
             byte infoByte = (byte)(version << 4 | flags);
 
             OutputStream.WriteByte(infoByte);
@@ -498,13 +504,13 @@
             bool optimizeInMemory = false;
             ulong offsetLengths = 0;
             string TempFileName = "";
-            if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
+            if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
                 //Determine if in-memory rearrangement should and can be used
-                if (BNGFrame.MaxRepackMemoryPercentage > 0) {
-                    ulong maxMemoryToUse = (ulong)(BNGFrame.MaxRepackMemoryPercentage * GetCurrentlMemMetrics().Free / 100) * 0x100000;
+                if (Frame.MaxRepackMemoryPercentage > 0) {
+                    ulong maxMemoryToUse = (ulong)(Frame.MaxRepackMemoryPercentage * GetCurrentlMemMetrics().Free / 100) * 0x100000;
                     ulong memToBeUsed = 0;
-                    for (int layer = 0; layer < BNGFrame.Layers.Count; layer++)
-                        memToBeUsed += (ulong)(BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * (BNGFrame.Layers[layer].BitsPerPixel / 8));
+                    for (int layer = 0; layer < Frame.Layers.Count; layer++)
+                        memToBeUsed += (ulong)(Frame.Layers[layer].Width * Frame.Layers[layer].Height * (Frame.Layers[layer].BitsPerPixel / 8));
                     if (memToBeUsed + 0x12C00000 < maxMemoryToUse) {
                         optimizeInMemory = true;
                     } else {
@@ -520,28 +526,28 @@
                 OutputStream.Write(BitConverter.GetBytes((uint)0));
             }
 
-            if (BNGFrame.Layers == null) throw new NullReferenceException(string.Format(nameof(BNGFrame.Layers)));
-            BNGFrame.LayerDataLengths = new ulong[BNGFrame.Layers.Count];
+            if (Frame.Layers == null) throw new NullReferenceException(string.Format(nameof(Frame.Layers)));
+            Frame.LayerDataLengths = new ulong[Frame.Layers.Count];
 
             Stream oStream = OutputStream; //No optimization, just write through
 
 
-            for (int LayerID = 0; LayerID < BNGFrame.Layers.Count; LayerID++) {
-                var BytesPerPixel = BNGFrame.Layers[LayerID].BitsPerPixel / 8;
-                var stride = BNGFrame.Layers[LayerID].Width * BytesPerPixel;
-                var numTilesX = BNGFrame.Layers[LayerID].TileDataOffsets.GetLongLength(0);
-                var numTilesY = BNGFrame.Layers[LayerID].TileDataOffsets.GetLongLength(1);
-                var tileSize = CalculateTileDimension(BNGFrame.Layers[LayerID].PixelFormat, BNGFrame.Layers[LayerID].BitsPerChannel, BNGFrame.TileSizeFactor);
+            for (int LayerID = 0; LayerID < Frame.Layers.Count; LayerID++) {
+                var BytesPerPixel = Frame.Layers[LayerID].BitsPerPixel / 8;
+                var stride = Frame.Layers[LayerID].Width * BytesPerPixel;
+                var numTilesX = Frame.Layers[LayerID].TileDataOffsets.GetLongLength(0);
+                var numTilesY = Frame.Layers[LayerID].TileDataOffsets.GetLongLength(1);
+                var tileSize = CalculateTileDimension(Frame.Layers[LayerID].ColorSpace, Frame.Layers[LayerID].BitsPerChannel, Frame.TileSizeFactor);
                 long bytesWritten = 0;
 
-                BNGFrame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
+                Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
 
-                Stream InputStream = new FileStream(BNGFrame.Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
+                Stream InputStream = new FileStream(Frame.Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
 
                 //Determine wether to use memory stream or the file stream provided.
-                if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && optimizeInMemory) {
+                if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && optimizeInMemory) {
                     oStream = new MemoryStream();
-                } else if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
+                } else if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
                     oStream = new FileStream(TempFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 0x800000, FileOptions.RandomAccess);
                 }
 
@@ -549,7 +555,7 @@
                 sw.Start();
                 for (uint y = 0; y < numTilesY; y++) {
                     for (uint x = 0; x < numTilesX; x++) {
-                        var corrTileSize = CalculateTileDimensionForCoordinate((BNGFrame.Layers[LayerID].Width, BNGFrame.Layers[LayerID].Height), tileSize, (x, y));
+                        var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, (x, y));
                         byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         MemoryStream iBuff = new MemoryStream();
@@ -560,13 +566,13 @@
                             inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                             InputStream.Seek(inputOffset, SeekOrigin.Begin);
                             InputStream.Read(lineBuff);
-                            Filter(BNGFrame.Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
+                            Filter(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
                             Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                         }
 
-                        Compress(BNGFrame.Layers[LayerID].Compression, BNGFrame.Layers[LayerID].CompressionLevel, BNGFrame.Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
-                        BNGFrame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
-                        BNGFrame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
+                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
+                        Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
+                        Frame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
 
                         bytesWritten += lineBuff.LongLength * corrTileSize.h;
                         var progress = (double)bytesWritten / InputStream.Length * 100.0;
@@ -576,28 +582,28 @@
                         }
 
                         oStream.Write(cBuff);
-                        BNGFrame.DataLength += (ulong)cBuff.LongLength;
+                        Frame.DataLength += (ulong)cBuff.LongLength;
                     }
                 }
             }
             
             //Serialize the metadata and then compress it using Brotli
             byte[] headerData;
-            if (BNGFrame.Flags.HasFlag(Flags.COMPRESSED_HEADER)) {
+            if (Frame.Flags.HasFlag(Flags.COMPRESSED_HEADER)) {
                 var Compressor = new BrotliCompressor(11, 24);
-                MemoryPackSerializer.Serialize(Compressor, BNGFrame);
+                MemoryPackSerializer.Serialize(Compressor, Frame);
                 headerData = Compressor.ToArray();
                 Compressor.Dispose();
             }
             else {
-                headerData = MemoryPackSerializer.Serialize(BNGFrame);
+                headerData = MemoryPackSerializer.Serialize(Frame);
             }
-            BNGFrame.HeaderLength = (ulong)headerData.LongLength;
+            Frame.HeaderLength = (ulong)headerData.LongLength;
 
             ulong dataEndPosition = (ulong)OutputStream.Position;
-            if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
-                dataEndPosition = (ulong)oStream.Length + BNGFrame.HeaderLength;
-                OutputStream.Write(BitConverter.GetBytes((uint)BNGFrame.HeaderLength));
+            if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
+                dataEndPosition = (ulong)oStream.Length + Frame.HeaderLength;
+                OutputStream.Write(BitConverter.GetBytes((uint)Frame.HeaderLength));
                 OutputStream.Write(headerData);
                 oStream.Flush();
                 oStream.Seek(0, SeekOrigin.Begin);
@@ -608,14 +614,14 @@
                 }
                 oStream.Close();
                 oStream.Dispose();
-                if (BNGFrame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory)
+                if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory)
                     File.Delete(TempFileName);                    
             } else {
                 OutputStream.Write(headerData);
                 OutputStream.Position = (long)offsetLengths;
                 OutputStream.Write(BitConverter.GetBytes(dataEndPosition));
                 OutputStream.Write(BitConverter.GetBytes((uint)headerData.Length));
-                OutputStream.Position = (long)dataEndPosition + (long)BNGFrame.HeaderLength;
+                OutputStream.Position = (long)dataEndPosition + (long)Frame.HeaderLength;
             }
 
             OutputStream.Flush();
@@ -694,11 +700,13 @@
         /// <exception cref="NullReferenceException"></exception>
         /// <exception cref="NotImplementedException"></exception>
         public ulong PrepareRAWFileToLayer(string RAWFileName, RAWImportParameters ImportParameters) {
-            BNGFrame.Width = ImportParameters.SourceDimensions.w;
-            BNGFrame.Height = ImportParameters.SourceDimensions.h;
-            BNGFrame.Flags = ImportParameters.Flags;
-            BNGFrame.TileSizeFactor = ImportParameters.TileSizeFactor;
-            BNGFrame.MaxRepackMemoryPercentage = ImportParameters.MaxRepackMemoryPercentage;
+            Frame.Width = ImportParameters.SourceDimensions.w;
+            Frame.Height = ImportParameters.SourceDimensions.h;
+            Frame.Flags = ImportParameters.Flags;
+            Frame.TileSizeFactor = ImportParameters.TileSizeFactor;
+            Frame.MaxRepackMemoryPercentage = ImportParameters.MaxRepackMemoryPercentage;
+            Frame.Name = ImportParameters.FrameName;
+            Frame.Description = ImportParameters.FrameDescription;
 
             var newLayer = new Layer();
 
@@ -707,35 +715,35 @@
             newLayer.Description = ImportParameters.LayerDescription;
             newLayer.Width = ImportParameters.SourceDimensions.w;
             newLayer.Height = ImportParameters.SourceDimensions.h;
-            if (ImportParameters.SourcePixelFormat != ImportParameters.TargetPixelFormat) throw new NotImplementedException("Color space conversion is not supported yet");
-            newLayer.PixelFormat = ImportParameters.TargetPixelFormat;
+            if (ImportParameters.SourceColorSpace != ImportParameters.TargetColorSpace) throw new NotImplementedException("Color space conversion is not supported yet");
+            newLayer.ColorSpace = ImportParameters.TargetColorSpace;
             if (ImportParameters.SourceBitsPerChannel != ImportParameters.TargetBitsPerChannel) throw new NotImplementedException("Bit depth conversion is not supported yet");
             newLayer.BitsPerChannel = ImportParameters.TargetBitsPerChannel;
-            if (ImportParameters.SourceDataType != ImportParameters.TargetDataType) throw new NotImplementedException("Data type conversion is not supported yet");
-            newLayer.PixelChannelDataType = ImportParameters.TargetDataType;
+            if (ImportParameters.SourcePixelFormat != ImportParameters.TargetDataType) throw new NotImplementedException("Data type conversion is not supported yet");
+            newLayer.PixelFormat = ImportParameters.TargetDataType;
             newLayer.Compression = ImportParameters.Compression;
             newLayer.CompressionLevel = ImportParameters.CompressionLevel;
             newLayer.BrotliWindowSize = ImportParameters.BrotliWindowSize;
             newLayer.CompressionPreFilter = ImportParameters.CompressionPreFilter;
-            newLayer.OffsetX = ImportParameters.Offset.x;
-            newLayer.OffsetY = ImportParameters.Offset.y;
-            newLayer.Opacity = ImportParameters.Opacity;
-            newLayer.BlendMode = ImportParameters.BlendMode;
+            newLayer.OffsetX = ImportParameters.LayerOffset.x;
+            newLayer.OffsetY = ImportParameters.LayerOffset.y;
+            newLayer.Opacity = ImportParameters.LayerOpacity;
+            newLayer.BlendMode = ImportParameters.LayerBlendMode;
 
-            newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.PixelFormat, newLayer.BitsPerChannel);
+            newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.ColorSpace, newLayer.BitsPerChannel);
 
             if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = newLayer.BitsPerPixel;
 
-            var tileSize = CalculateTileDimension(newLayer.PixelFormat, newLayer.BitsPerChannel, BNGFrame.TileSizeFactor);
+            var tileSize = CalculateTileDimension(newLayer.ColorSpace, newLayer.BitsPerChannel, Frame.TileSizeFactor);
             var numTilesX = (uint)Math.Floor(newLayer.Width / (double)tileSize.w);
             var numTilesY = (uint)Math.Floor(newLayer.Height / (double)tileSize.h);
 
             newLayer.TileDataOffsets = new ulong[numTilesX + 1 , numTilesY + 1];
             newLayer.BaseTileDimension = tileSize;
 
-            BNGFrame.Layers.Add(newLayer);
+            Frame.Layers.Add(newLayer);
 
-            return (ulong)BNGFrame.Layers.Count - 1;
+            return (ulong)Frame.Layers.Count - 1;
         }
 
         private (uint w, uint h) CalculateTileDimensionForCoordinate((uint w, uint h) LayerDimension, (uint w, uint h) TileSize, (uint x, uint y) TileIndex) {

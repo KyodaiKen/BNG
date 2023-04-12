@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-t Encode -i Saiko_Artist-2500x3500xRGB24.data -o Saiko_Artist-2500x3500xRGB24.bng -w 2500 -h 3500 --optimize-streaming --repack-in-memory 0",
+      "commandLineArgs": "-e -i \"fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500\" Saiko_Artist-2500x3500xRGB24_decoded.data",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

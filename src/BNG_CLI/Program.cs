@@ -1,50 +1,400 @@
 ﻿using BNG_CORE;
-using CommandLine;
 using System.Diagnostics;
-using System.Runtime.CompilerServices;
+using System.IO;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Xml.Serialization;
 
 namespace BNG_CLI {
     public enum Task {
         Encode,
         Decode
     }
-    public class Options {
-        [Option('t', "task", Required = true, HelpText = "Task to be done: Encode, Decode")]
-        public Task Task { get; set; } = Task.Encode;
-        [Option('i', "input", Required = true, HelpText = "Input file to be processed (RAW Bitmap only)")]
-        public string InputFile { get; set; } = "";
-        [Option('o', "output", Required = true, HelpText = "Output file to be written to")]
-        public string OutputFile { get; set; } = "";
-        [Option('w', "src-width", Required = false, HelpText = "Source width", Default = (uint)1920)]
-        public uint SrcWidth { get; set; } = 0;
-        [Option('h', "src-height", Required = false, HelpText = "Source height", Default = (uint)1080)]
-        public uint SrcHeight { get; set; } = 0;
-        [Option('p', "src-pix-fmt", Required = false, HelpText = "Source pixel format", Default = PixelFormat.RGB)]
-        public PixelFormat PixFmt { get; set; } = PixelFormat.RGB;
-        [Option('b', "src-bits-per-channel", Required = false, HelpText = "Source bits per channel", Default = (uint)8)]
-        public uint BPC { get; set; } = 8;
-        [Option('d', "src-channel-data-format", Required = false, HelpText = "Source channel data format (IntegerUnsigned, IntegerSigned, FloatIEEE)", Default = PixelChannelDataType.IntegerUnsigned)]
-        public PixelChannelDataType PixelChannelDataType { get; set; } = PixelChannelDataType.IntegerUnsigned;
-        [Option("src-res-h", Required = false, HelpText = "Source horizontal resolution in dpi", Default = 72)]
-        public double SrcResolutionH { get; set; } = 72;
-        [Option("src-res-v", Required = false, HelpText = "Source vertical resolution in dpi", Default = 72)]
-        public double SrcResolutionV { get; set; } = 72;
-        [Option('c', "compressor", Required = false, HelpText = "Compression algorithm: None, Brotli, ZSTD", Default = Compression.Brotli)]
-        public Compression Compression { get; set; } = Compression.Brotli;
-        [Option('f', "filter", Required = false, HelpText = "Compression filter: None, Sub, Up, Average, Paeth", Default = CompressionPreFilter.Up)]
-        public CompressionPreFilter CompressionFilter { get; set; } = CompressionPreFilter.Up;
-        [Option('l', "level", Required = false, HelpText = "Compression level", Default = 6)]
-        public int CompressionLevel { get; set; } = 6;
 
-        [Option("uncompressed-header", Required = false, HelpText = "Disable header compression")]
-        public bool UncompressedHeader { get; set; }
-        [Option("optimize-streaming", Required = false, HelpText = "Optimize for streaming. Repacks the file and puts the headers at the beginning of each frame.")]
-        public bool OptimizeStreaming { get; set; }
-        [Option("repack-in-memory", Required = false, HelpText = "Repacks each frame of the output file in memory. Enter the maximum memory percantage to be used. If it would be exceeded, file repacking is used.", Default = 80)]
-        public float RepackInRAM { get; set; }
-        [Option("tsf", Required = false, HelpText = "Tile size multiplicator. Only integers allowed.", Default = 1)]
-        public float TileSizeFactor { get; set; } = 1;
+    public struct FileSource {
+        public string pathName;
+        public RAWImportParameters importParameters;
+        public string outputPath; //For decoding BNG to multiple files
+    }
+    class ParseArguments {
+        public Task Task { get; set; } = Task.Decode;
+        public List<FileSource> InputFiles { get; set; }
+        public string OutputFile { get; set; } = "";
+        public bool ErrorState { get; set; }
+
+        private string[] _args;
+        private StringWriter Output { get; set; }
+        private StringWriter Help { get; set; }
+
+        private delegate void dgFoundArgCallback(long index);
+        private delegate void dgArgNotFoundCallback();
+        private delegate void dgEnumNotFound();
+        private delegate void dgEnumFound(object enumVal);
+
+        public ParseArguments(string[] args) {
+            Output = new();
+            Help = new();
+            _args = args;
+            ErrorState = false;
+            Task _Task = Task;
+
+            if (_args.Length == 0) {
+                ErrorState = true;
+            }
+
+            uint width = 0, height = 0, lox = 0, loy = 0;
+
+            InputFiles = new();
+            FileSource fileinfo = new();
+            fileinfo.pathName = "";
+            fileinfo.importParameters = new();
+
+            Help.WriteLine("BNG_CLI usage ------------------------------------------");
+            Help.WriteLine("BNG_CLI [-e -mi <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation>)] / [-i <bng file>] [options] <output file name>\n");
+
+            //Scan for encoding task
+            Help.Write("-e  Tell the program to go into encode mode. If not set, BNG_CLI will assume a BNG file to be decoded.\n\n");
+            FindArg("-e", FoundE);
+            Task = Task.Decode;
+            void FoundE(long index) {
+                _Task = Task.Encode;
+            }
+
+
+
+            if (_Task == Task.Encode) {
+                //Encode
+                Help.WriteLine("Options for encoding--------------------------------------\n");
+                Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn=<file>,key=value,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
+                Help.WriteLine("\n  Input file\n");
+                Help.WriteLine("    fn=    (Required)                 Input file name               Relative or absolute file path");
+                Help.WriteLine("    fsqb=  (Default=None)             File sequence begin number    Integer from 0 to " + long.MaxValue.ToString());
+                Help.WriteLine("    fsqe=  (Default=None)             File sequence end number      Integer from 0 to " + long.MaxValue.ToString());
+
+                Help.WriteLine("\n  RAW import\n");
+                Help.WriteLine("    w=     (Required)                 RAW image width               Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    h=     (Required)                 RAW image height              Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    cs=    (Default=RGB)              RAW image Color space         { RGB, RGBA, YCrCb, YCrCbA, CMYK, CMYKA }");
+                Help.WriteLine("    pf=    (Default=IntegerUnsigned)  RAW image Pixel format        { IntegerUnsigned, IntegerSigned, FloatIEEE }");
+                Help.WriteLine("    bpc=   (Default=8)                RAW image Bits per CHANNEL    { 8, 16, 32, 64 }");
+
+                Help.WriteLine("\n  Frame\n");
+                Help.WriteLine("    frnm=  (Default=Filename w/o ext) Frame name                    Free text");
+                Help.WriteLine("    frdc=  (Default=Empty)            Frame description             Free text");
+                Help.WriteLine("    frdur= (Default=1/15)             Frame display duration        Seconds with decimal places");
+
+                Help.WriteLine("\n  Layer\n");
+                Help.WriteLine("    l4f=   (Default=None)             Add this as layer for frame <frame id> (ID is an auto incrementing number per file order)");
+                Help.WriteLine("    lnm=   (Default=Filename w/o ext) Layer name                    Free text");
+                Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
+                Help.WriteLine("    lox=   (Required)                 Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    loy=   (Required)                 Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
+                Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
+
+                Help.WriteLine("\n  Output\n");
+                Help.WriteLine("    flt=   (Default=Up)               Compression pre-filter        { Sub, Up, Average, Paeth }");
+                Help.WriteLine("    compr= (Default=Brotli)           Compression algorithm         { Brotli, ZSTD }");
+                Help.WriteLine("    level= (Default=6)                Compression level             Brotli: 0...11, ZSTD: 1 ... 22");
+                Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            1...24");
+                Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
+                               "                                                                    If more is needed than set here, a temporary file in the destination path is used\n"+
+                               "                                                                    instead.");
+
+
+                FindArg("-i", FoundMI, NotFoundMI);
+                void FoundMI(long index) {
+                    if (index + 1 <= _args.Length) {
+                        fileinfo.importParameters.Flags = Flags.COMPRESSED_HEADER;
+
+                        string[] inputs = Split(_args[index + 1], ';');
+                        foreach (string input in inputs) {
+                            string[] options = Split(input, ',');
+                            foreach (string option in options) {
+                                string[] tuple = Split(option, '=');
+                                switch (tuple[0]) {
+                                    case "fn":
+                                        fileinfo.pathName = tuple[1];
+                                        break;
+                                    case "w":
+                                        if (!uint.TryParse(tuple[1], out width)) {
+                                            Output.WriteLine("Error: Illegal number for w. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "h":
+                                        if (!uint.TryParse(tuple[1], out height)) {
+                                            Output.WriteLine("Error: Illegal number for h. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "cs":
+                                        AssignEnum(typeof(ColorSpace), tuple[1], CSNotFound, CSFound);
+                                        void CSFound(object enumVal) {
+                                            fileinfo.importParameters.SourceColorSpace = (ColorSpace)enumVal;
+                                        }
+                                        void CSNotFound() {
+                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "pf":
+                                        AssignEnum(typeof(PixelFormat), tuple[1], PFNotFound, PFFound);
+                                        void PFFound(object enumVal) {
+                                            fileinfo.importParameters.SourcePixelFormat = (PixelFormat)enumVal;
+                                        }
+                                        void PFNotFound() {
+                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "bpc":
+                                        uint value = 0;
+                                        if (!uint.TryParse(tuple[1], out value)) {
+                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            ErrorState = true;
+                                            break;
+                                        }
+                                        if (value != 0 || value != 8 || value != 16 || value != 32 | value != 64) {
+                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            ErrorState = true;
+                                            break;
+                                        }
+                                        else {
+                                            fileinfo.importParameters.SourceBitsPerChannel = value;
+                                        }
+                                        break;
+                                    case "frnm":
+                                        fileinfo.importParameters.FrameName = tuple[1];
+                                        break;
+                                    case "frdc":
+                                        fileinfo.importParameters.FrameDescription = tuple[1];
+                                        break;
+                                    case "frdur":
+                                        long fDur = 0;
+                                        if (!long.TryParse(tuple[1], out fDur)) {
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (fDur < 0) {
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.FrameDuration = fDur;
+                                        break;
+                                    case "l4f":
+                                        long l4f = 0;
+                                        if (!long.TryParse(tuple[1], out l4f)) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (l4f < 0) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.LayerBelongsToFrameNum = l4f;
+                                        break;
+                                    case "lnm":
+                                        fileinfo.importParameters.LayerName = tuple[1];
+                                        break;
+                                    case "ldc":
+                                        fileinfo.importParameters.LayerDescription = tuple[1];
+                                        break;
+                                    case "lox":
+                                        if (!uint.TryParse(tuple[1], out lox)) {
+                                            Output.WriteLine("Error: Illegal number for lox. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "loy":
+                                        if (!uint.TryParse(tuple[1], out loy)) {
+                                            Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "lop":
+                                        double lop;
+                                        if (!double.TryParse(tuple[1], out lop)) {
+                                            Output.WriteLine("Error: Illegal number for lop. Please enter only numbers and a decimal point.");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.LayerOpacity = lop;
+                                        break;
+                                    case "lbm":
+                                        AssignEnum(typeof(PixelFormat), tuple[1], LBMNotFound, LBMFound);
+                                        void LBMFound(object enumVal) {
+                                            fileinfo.importParameters.LayerBlendMode = (LayerBlendMode)enumVal;
+                                        }
+                                        void LBMNotFound() {
+                                            Output.WriteLine("Error: Value for lbm is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "flt":
+                                        AssignEnum(typeof(PixelFormat), tuple[1], FLTNotFound, FLTFound);
+                                        void FLTFound(object enumVal) {
+                                            fileinfo.importParameters.CompressionPreFilter = (CompressionPreFilter)enumVal;
+                                        }
+                                        void FLTNotFound() {
+                                            Output.WriteLine("Error: Value for flt is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "compr":
+                                        AssignEnum(typeof(PixelFormat), tuple[1], ComprNotFound, ComprFound);
+                                        void ComprFound(object enumVal) {
+                                            fileinfo.importParameters.Compression = (Compression)enumVal;
+                                        }
+                                        void ComprNotFound() {
+                                            Output.WriteLine("Error: Value for flt is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "level":
+                                        int comprLevel;
+                                        if (!int.TryParse(tuple[1], out comprLevel)) {
+                                            Output.WriteLine("Error: Illegal number for level. Please enter an integer number depending on the compression algorithm.");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (fileinfo.importParameters.Compression == Compression.Brotli) {
+                                            if (comprLevel < 0 || comprLevel > 11) {
+                                                Output.WriteLine("Error: Illegal number for Brotli level. Please enter an integer number between 0 and 11");
+                                                ErrorState = true;
+                                                return;
+                                            }
+                                        }
+                                        else if (fileinfo.importParameters.Compression == Compression.ZSTD) {
+                                            if (comprLevel < 0 || comprLevel > 22) {
+                                                Output.WriteLine("Error: Illegal number for ZSTD level. Please enter an integer number between 0 and 22");
+                                                ErrorState = true;
+                                                return;
+                                            }
+                                        }
+                                        fileinfo.importParameters.CompressionLevel = comprLevel;
+                                        break;
+                                    case "bwnd":
+                                        int bwnd;
+                                        if (!int.TryParse(tuple[1], out bwnd)) {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (bwnd < 0 || bwnd > 24) {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.BrotliWindowSize = bwnd;
+                                        break;
+                                    case "ensop":
+                                        float ensop;
+                                        if (!float.TryParse(tuple[1], out ensop)) {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (ensop < 0 || ensop > 100) {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.MaxRepackMemoryPercentage = ensop;
+                                        fileinfo.importParameters.Flags |= Flags.STREAMING_OPTIMIZED;
+                                        break;
+                                }
+                            }
+
+                            fileinfo.importParameters.SourceDimensions = (width, height);
+                            fileinfo.importParameters.LayerOffset = (lox, loy);
+
+                            InputFiles.Add(fileinfo);
+                        }
+                    }
+                    else {
+                        //Decode
+                        Help.WriteLine("Options for decoding--------------------------------------\n");
+                        Help.WriteLine("-i  Input file name (Required)");
+                    }
+                }
+            }
+            void NotFoundMI() {
+                Output.WriteLine("Error: No inputs given!");
+                ErrorState = true;
+            }
+
+            if (ErrorState) {
+                Output.Write(Help.ToString());
+                return;
+            }
+
+            OutputFile = _args[_args.LongLength - 1];
+            Task = _Task;
+        }
+
+        private void FindArg(string arg, dgFoundArgCallback foundArgCallback, dgArgNotFoundCallback? notFoundCallback = null) {
+            for (long i = 0; i < _args.LongLength; i++) {
+                if (_args[i].Equals(arg, StringComparison.OrdinalIgnoreCase)) {
+                    foundArgCallback.Invoke(i);
+                    return;
+                }
+            }
+            if (notFoundCallback != null) notFoundCallback.Invoke();
+        }
+
+        private void AssignEnum(Type T, string enumValue, dgEnumNotFound notFoundCallback, dgEnumFound foundCallback) {
+            var elements = Enum.GetValues(T);
+            if (!elements.Cast<List<string>>().Contains(new List<string> { enumValue.ToLower() })) {
+                notFoundCallback.Invoke();
+            }
+            else {
+                for (long element = 0; element < elements.LongLength; element++) {
+                    if (element.ToString().ToLower().Equals(enumValue.ToLower())) {
+                        foundCallback.Invoke(elements.GetValue(element));
+                        return;
+                    }
+                }
+            }
+            notFoundCallback.Invoke();
+        }
+
+        private string[] Split(string line, char by) {
+            List<string> result = new List<string>();
+            StringBuilder currentStr = new StringBuilder("");
+            bool inQuotes = false;
+            for (int i = 0; i < line.Length; i++) // For each character
+            {
+                if (line[i] == '\"') // Quotes are closing or opening
+                    inQuotes = !inQuotes;
+                else if (line[i] == by) // Comma
+                {
+                    if (!inQuotes) // If not in quotes, end of current string, add it to result
+                    {
+                        result.Add(currentStr.ToString());
+                        currentStr.Clear();
+                    }
+                    else
+                        currentStr.Append(line[i]); // If in quotes, just add it 
+                }
+                else // Add any other character to current string
+                    currentStr.Append(line[i]);
+            }
+            result.Add(currentStr.ToString());
+            return result.ToArray(); // Return array of all strings
+        }
+
+        public string GetOutput() {
+            return Output.ToString();
+        }
     }
     class Program {
         static int Main(string[] args) {
@@ -57,34 +407,18 @@ namespace BNG_CLI {
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-us");
             Console.OutputEncoding = Encoding.UTF8;
 
-            void why(ParserSettings fy) {
-                fy.HelpWriter = Help;
-                fy.CaseSensitive = false;
-                fy.CaseInsensitiveEnumValues = true;
-                fy.ParsingCulture = Thread.CurrentThread.CurrentCulture;
-            }
-            Parser cmdParser = new Parser(why);
+            ParseArguments p = new(args);
 
-            var parms = cmdParser.ParseArguments<Options>(args);
-            parms.WithParsed(o => {
-                switch (o.Task) {
-                    case Task.Encode:
-                        Bitmap BNG = new Bitmap(o.InputFile, new RAWImportParameters() {
-                          SourceDimensions = (o.SrcWidth, o.SrcHeight)
-                        , SourcePixelFormat = o.PixFmt
-                        , TargetPixelFormat = o.PixFmt
-                        , SourceBitsPerChannel = o.BPC
-                        , TargetBitsPerChannel = o.BPC
-                        , SourceDataType = o.PixelChannelDataType
-                        , TargetDataType = o.PixelChannelDataType
-                        , Resolution = (o.SrcResolutionH, o.SrcResolutionV)
-                        , CompressionPreFilter = o.CompressionFilter
-                        , Compression = o.Compression
-                        , CompressionLevel = o.CompressionLevel
-                        , Flags = (o.OptimizeStreaming ? Flags.STREAMING_OPTIMIZED : 0) | (o.UncompressedHeader ? 0 : Flags.COMPRESSED_HEADER)
-                        , MaxRepackMemoryPercentage = o.RepackInRAM
-                        , TileSizeFactor = o.TileSizeFactor
-                        });
+            if (p.ErrorState) {
+                Console.Write(p.GetOutput());
+                return 1;
+            }
+
+            switch (p.Task) {
+                case Task.Encode:
+                    Stream outFile = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
+                    foreach (FileSource f in p.InputFiles) {
+                        Bitmap BNG = new Bitmap(f.pathName, f.importParameters);
 
                         void pChanged(double progress) {
                             Console.CursorLeft = 0;
@@ -93,42 +427,39 @@ namespace BNG_CLI {
 
                         BNG.ProgressChangedEvent += pChanged;
 
-                        Stream outFile = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
                         BNG.WriteBNGFrame(ref outFile);
+                    }
+                    outFile.Close();
+                    outFile.Dispose();
+                    break;
+                case Task.Decode:
+                    Bitmap BNGToDecode = new Bitmap();
+                    Stream inFile = new FileStream(p.InputFiles[0].pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0xFF00000);
+                    StringBuilder log;
+                    BNGToDecode.LoadBNG(ref inFile, out log);
+                    Console.WriteLine(log.ToString());
 
-                        outFile.Close();
-                        outFile.Dispose();
-                        break;
-                    case Task.Decode:
-                        Bitmap BNGToDecode = new Bitmap();
-                        Stream inFile = new FileStream(o.InputFile, FileMode.Open, FileAccess.Read, FileShare.Read, 0xFF00000);
-                        StringBuilder log;
-                        BNGToDecode.LoadBNG(ref inFile, out log);
-                        Console.WriteLine(log.ToString());
+                    Stream outFileDec = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+                    void pChangedDec(double progress) {
+                        Console.CursorLeft = 0;
+                        Console.Write(string.Format("{0:0.00}%", progress));
+                    }
 
-                        Stream outFileDec = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                        void pChangedDec(double progress) {
-                            Console.CursorLeft = 0;
-                            Console.Write(string.Format("{0:0.00}%", progress));
-                        }
+                    BNGToDecode.ProgressChangedEvent += pChangedDec;
+                    BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0, 0);
 
-                        BNGToDecode.ProgressChangedEvent += pChangedDec;
-                        BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0, 0);
+                    outFileDec.Flush();
+                    outFileDec.Close();
+                    outFileDec.Dispose();
 
-                        outFileDec.Flush();
-                        outFileDec.Close();
-                        outFileDec.Dispose();
-
-                        inFile.Close();
-                        inFile.Dispose();
-                        break;
-                }
-            });
+                    inFile.Close();
+                    inFile.Dispose();
+                    break;
+            }
 
             Console.WriteLine();
             Console.Write(string.Format("Processing took {0}", sw.Elapsed));
 
-            if (parms.Errors.Count() > 0) Console.Write(Help);
             return 0;
         }
     }
