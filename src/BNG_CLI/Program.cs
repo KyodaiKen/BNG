@@ -466,17 +466,19 @@ namespace BNG_CLI {
                         } else if (f.importParameters.LayerToCurrentFrame) {
                             BNG.AddLayer(f.pathName, f.importParameters);
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
 
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame) {
                             Console.WriteLine("Compressing file:");
                             BNG.WriteBNGFrame(ref outFile);
-                        } else if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && !f.importParameters.OpenFrame) {
+                        }
+                        if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.OpenFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             BNG.AddLayer(f.pathName, f.importParameters);
-                            BNG.WriteBNGFrame(ref outFile);
                             Console.WriteLine("Compressing " + Path.GetFileName(f.pathName) + ":");
+                            BNG.WriteBNGFrame(ref outFile);
                         }
 
                         Console.CursorLeft = 0;
