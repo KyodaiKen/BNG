@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i \"fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500\" Saiko_Artist-2500x3500xRGB24_decoded.data",
+      "commandLineArgs": "-e -i \"fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500,compr=zstd,flt=up,level=22,ensop=80,fropn=1;fn=screenshot.data,w=3840,h=2160,ltc=1,lcf=1\" test.bng",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

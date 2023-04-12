@@ -1,4 +1,5 @@
 ﻿using BNG_CORE;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -45,9 +46,8 @@ namespace BNG_CLI {
             uint width = 0, height = 0, lox = 0, loy = 0;
 
             InputFiles = new();
-            FileSource fileinfo = new();
-            fileinfo.pathName = "";
-            fileinfo.importParameters = new();
+            
+
 
             Help.WriteLine("BNG_CLI usage ------------------------------------------");
             Help.WriteLine("BNG_CLI [-e -mi <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation>)] / [-i <bng file>] [options] <output file name>\n");
@@ -82,15 +82,17 @@ namespace BNG_CLI {
                 Help.WriteLine("    frnm=  (Default=Filename w/o ext) Frame name                    Free text");
                 Help.WriteLine("    frdc=  (Default=Empty)            Frame description             Free text");
                 Help.WriteLine("    frdur= (Default=1/15)             Frame display duration        Seconds with decimal places");
+                Help.WriteLine("    fropn= (Default=0)                Enter 1 if you want to add more layers to this frame with future inputs");
 
                 Help.WriteLine("\n  Layer\n");
-                Help.WriteLine("    l4f=   (Default=None)             Add this as layer for frame <frame id> (ID is an auto incrementing number per file order)");
+                Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current frame");
                 Help.WriteLine("    lnm=   (Default=Filename w/o ext) Layer name                    Free text");
                 Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
                 Help.WriteLine("    lox=   (Required)                 Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    loy=   (Required)                 Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
+                Help.WriteLine("    lcf=   (Default=1)                Enter 1 if you want this layer to be the last in the current frame");
 
                 Help.WriteLine("\n  Output\n");
                 Help.WriteLine("    flt=   (Default=Up)               Compression pre-filter        { Sub, Up, Average, Paeth }");
@@ -105,10 +107,13 @@ namespace BNG_CLI {
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
                     if (index + 1 <= _args.Length) {
-                        fileinfo.importParameters.Flags = Flags.COMPRESSED_HEADER;
-
                         string[] inputs = Split(_args[index + 1], ';');
                         foreach (string input in inputs) {
+
+                            FileSource fileinfo = new();
+                            fileinfo.pathName = "";
+                            fileinfo.importParameters = new();
+                            fileinfo.importParameters.Flags = Flags.COMPRESSED_HEADER;
                             string[] options = Split(input, ',');
                             foreach (string option in options) {
                                 string[] tuple = Split(option, '=');
@@ -186,19 +191,33 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.FrameDuration = fDur;
                                         break;
-                                    case "l4f":
-                                        long l4f = 0;
-                                        if (!long.TryParse(tuple[1], out l4f)) {
+                                    case "fropn":
+                                        int fropn = 0;
+                                        if (!int.TryParse(tuple[1], out fropn)) {
                                             Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (l4f < 0) {
+                                        if (fropn < 0) {
                                             Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
-                                        fileinfo.importParameters.LayerBelongsToFrameNum = l4f;
+                                        fileinfo.importParameters.OpenFrame = fropn == 1;
+                                        break;
+                                    case "ltc":
+                                        int ltc = 0;
+                                        if (!int.TryParse(tuple[1], out ltc)) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (ltc < 0) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.LayerToCurrentFrame = ltc == 1;
                                         break;
                                     case "lnm":
                                         fileinfo.importParameters.LayerName = tuple[1];
@@ -239,8 +258,22 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                         }
                                         break;
+                                    case "lcf":
+                                        int lcf = 0;
+                                        if (!int.TryParse(tuple[1], out lcf)) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (lcf < 0) {
+                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.LayerClosesFrame = lcf == 1;
+                                        break;
                                     case "flt":
-                                        AssignEnum(typeof(PixelFormat), tuple[1], FLTNotFound, FLTFound);
+                                        AssignEnum(typeof(CompressionPreFilter), tuple[1], FLTNotFound, FLTFound);
                                         void FLTFound(object enumVal) {
                                             fileinfo.importParameters.CompressionPreFilter = (CompressionPreFilter)enumVal;
                                         }
@@ -250,7 +283,7 @@ namespace BNG_CLI {
                                         }
                                         break;
                                     case "compr":
-                                        AssignEnum(typeof(PixelFormat), tuple[1], ComprNotFound, ComprFound);
+                                        AssignEnum(typeof(Compression), tuple[1], ComprNotFound, ComprFound);
                                         void ComprFound(object enumVal) {
                                             fileinfo.importParameters.Compression = (Compression)enumVal;
                                         }
@@ -353,15 +386,10 @@ namespace BNG_CLI {
 
         private void AssignEnum(Type T, string enumValue, dgEnumNotFound notFoundCallback, dgEnumFound foundCallback) {
             var elements = Enum.GetValues(T);
-            if (!elements.Cast<List<string>>().Contains(new List<string> { enumValue.ToLower() })) {
-                notFoundCallback.Invoke();
-            }
-            else {
-                for (long element = 0; element < elements.LongLength; element++) {
-                    if (element.ToString().ToLower().Equals(enumValue.ToLower())) {
-                        foundCallback.Invoke(elements.GetValue(element));
-                        return;
-                    }
+            for (long element = 0; element < elements.LongLength; element++) {
+                if (elements.GetValue(element).ToString().ToLower().Equals(enumValue.ToLower())) {
+                    foundCallback.Invoke(elements.GetValue(element));
+                    return;
                 }
             }
             notFoundCallback.Invoke();
@@ -417,17 +445,43 @@ namespace BNG_CLI {
             switch (p.Task) {
                 case Task.Encode:
                     Stream outFile = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
-                    foreach (FileSource f in p.InputFiles) {
-                        Bitmap BNG = new Bitmap(f.pathName, f.importParameters);
+                    string fil = p.InputFiles.Count > 1 ? "{0} files given " : "1 file given ";
+                    Console.WriteLine(string.Format(fil + "--------------------------------", p.InputFiles.Count));
+                    Bitmap BNG = new Bitmap();
+                    BNG.ProgressChangedEvent += pChanged;
 
-                        void pChanged(double progress) {
-                            Console.CursorLeft = 0;
-                            Console.Write(string.Format("{0:0.00}%", progress));
+                    void pChanged(double progress) {
+                        Console.CursorLeft = 0;
+                        Console.Write(string.Format("{0:0.00}%", progress));
+                    }
+
+                    foreach (FileSource f in p.InputFiles) {
+                        Stopwatch fsw = new();
+                        fsw.Start();
+                        
+                        if (f.importParameters.OpenFrame) {
+                            BNG = new Bitmap();
+                            BNG.ProgressChangedEvent += pChanged;
+                            BNG.AddLayer(f.pathName, f.importParameters);
+                        } else if (f.importParameters.LayerToCurrentFrame) {
+                            BNG.AddLayer(f.pathName, f.importParameters);
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
                         }
 
-                        BNG.ProgressChangedEvent += pChanged;
+                        if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame) {
+                            Console.WriteLine("Compressing file:");
+                            BNG.WriteBNGFrame(ref outFile);
+                        } else if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && !f.importParameters.OpenFrame) {
+                            BNG = new Bitmap();
+                            BNG.ProgressChangedEvent += pChanged;
+                            BNG.AddLayer(f.pathName, f.importParameters);
+                            BNG.WriteBNGFrame(ref outFile);
+                            Console.WriteLine("Compressing " + Path.GetFileName(f.pathName) + ":");
+                        }
 
-                        BNG.WriteBNGFrame(ref outFile);
+                        Console.CursorLeft = 0;
+                        Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
+                        fsw.Stop();
                     }
                     outFile.Close();
                     outFile.Dispose();
@@ -456,9 +510,9 @@ namespace BNG_CLI {
                     inFile.Dispose();
                     break;
             }
-
-            Console.WriteLine();
-            Console.Write(string.Format("Processing took {0}", sw.Elapsed));
+            
+            Console.Write(string.Format("Overall processing took {0}", sw.Elapsed));
+            sw.Stop();
 
             return 0;
         }

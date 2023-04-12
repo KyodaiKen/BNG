@@ -146,7 +146,9 @@
         public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
         public string LayerName { get; set; } = string.Empty;
         public string LayerDescription { get; set; } = string.Empty;
-        public long LayerBelongsToFrameNum { get; set; } = -1;
+        public bool LayerToCurrentFrame { get; set; } = false;
+        public bool OpenFrame { get; set; } = false;
+        public bool LayerClosesFrame { get; set; } = false;
         public string FrameName { get; set; } = string.Empty;
         public string FrameDescription { get; set; } = string.Empty;
         public double FrameDuration { get; set; } = 1 / 15;
@@ -486,9 +488,6 @@
             if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
 
-            //Truncate data if something has already been written into it from outside.
-            OutputStream.SetLength(0);
-
             //Write magic word
             OutputStream.Write(Encoding.ASCII.GetBytes("BNG"));
 
@@ -553,6 +552,7 @@
 
                 Stopwatch sw = new();
                 sw.Start();
+                ProgressChangedEvent?.Invoke(0);
                 for (uint y = 0; y < numTilesY; y++) {
                     for (uint x = 0; x < numTilesX; x++) {
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, (x, y));
