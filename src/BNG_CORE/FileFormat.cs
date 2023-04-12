@@ -88,12 +88,12 @@
         public uint Width { get; set; } = 0;
         public uint Height { get; set; } = 0;
         public List<DataBlock>? ExtraData { get; set; }
-        public ulong[,] TileDataOffsets { get; set; }
+        public ulong[,] TileDataLengths { get; set; }
         public (uint w, uint h) BaseTileDimension { get; set; }
         [MemoryPackIgnore]
-        public ulong[,] TileDataLengths { get; set; }
-        [MemoryPackIgnore]
         public (uint w, uint h)[,] TileDimensions { get; set; }
+        [MemoryPackIgnore]
+        public ulong[,] TileDataOffsets { get; set; }
     }
 
     [MemoryPackable]
@@ -118,8 +118,10 @@
         public double ResolutionV { get; set; }
         public double DisplayTime { get; set; } = 1 / 12; // Frame display time in seconds for animations
         public List<DataBlock>? Metadata { get; set; }
-        public List<ulong>? LayerDataOffsets { get; set; }
+        public ulong[] LayerDataLengths { get; set; }
         public List<Layer>? Layers { get; set; }
+        [MemoryPackIgnore]
+        public ulong[] LayerDataOffsets { get; set; }
     }
 
 
@@ -241,8 +243,12 @@
             log.AppendLine(string.Format("Vertical resolution..: {0}", BNGFrame.ResolutionV));
             log.AppendLine(string.Format("Number of layers.....: {0}", BNGFrame.Layers.Count));
 
+            BNGFrame.LayerDataOffsets = new ulong[BNGFrame.Layers.Count];
+
+            ulong layerDataOffset = 0;
             for (int layer = 0; layer < BNGFrame.Layers.Count;  layer++) {
                 string lyrNum = string.Format("Layer {0}", layer) + " ";
+                BNGFrame.LayerDataOffsets[layer] += BNGFrame.LayerDataLengths[layer];
                 log.Append(lyrNum);
                 log.AppendLine(new string('-', 40 - lyrNum.Length));
                 log.AppendLine(string.Format("Layer name...........: {0}", BNGFrame.Layers[layer].Name));
@@ -259,49 +265,38 @@
                 log.AppendLine(string.Format("Pre-filter...........: {0}", BNGFrame.Layers[layer].CompressionPreFilter.ToString()));
                 log.AppendLine(string.Format("Base tile dimension W: {0}", BNGFrame.Layers[layer].BaseTileDimension.w));
                 log.AppendLine(string.Format("Base tile dimension H: {0}", BNGFrame.Layers[layer].BaseTileDimension.h));
-                log.AppendLine(string.Format("Data start offset....: {0}", BNGFrame.LayerDataOffsets[layer]));
+                log.AppendLine(string.Format("Data offset..........: {0}", BNGFrame.LayerDataOffsets[layer]));
+                log.AppendLine(string.Format("Data size (bytes)....: {0}", BNGFrame.LayerDataLengths[layer]));
+                log.AppendLine(string.Format("Uncompressed size (\"): {0}", BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8));
+                log.AppendLine(string.Format("Number of tiles......: {0}", BNGFrame.Layers[layer].TileDataLengths.LongLength));
 
-                var txl = BNGFrame.Layers[layer].TileDataOffsets.GetLongLength(0);
-                var tyl = BNGFrame.Layers[layer].TileDataOffsets.GetLongLength(1);
+                var txl = BNGFrame.Layers[layer].TileDataLengths.GetLongLength(0);
+                var tyl = BNGFrame.Layers[layer].TileDataLengths.GetLongLength(1);
                 BNGFrame.Layers[layer].TileDimensions = new (uint w, uint h)[txl, tyl];
-                BNGFrame.Layers[layer].TileDataLengths = new ulong[txl, tyl];
+                BNGFrame.Layers[layer].TileDataOffsets = new ulong[txl, tyl];
 
                 StringBuilder tileInfo = new StringBuilder();
 
-                ulong tileDataLength = 0;
                 for (uint tileY = 0; tileY < tyl; tileY++) {
                     for (uint tileX = 0; tileX < txl; tileX++) {
+                        BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY] += BNGFrame.Layers[layer].TileDataLengths[tileX, tileY];
                         string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
-                        tileInfo.Append(tleNum);
-                        tileInfo.AppendLine(new string('-', 40 - tleNum.Length));
-                        ulong tleWzUnPacked = 0;
-                        ulong tleSzPacked = 0;
-                        if (tileX == txl-1 && tileY != tyl-1) {
-                            tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[0, tileY + 1] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
-                        } else if (tileX == txl-1 && tileY == tyl-1) {
-                            tleSzPacked = BNGFrame.HeaderOffset - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
-                        } else {
-                            tleSzPacked = BNGFrame.Layers[layer].TileDataOffsets[tileX + 1, tileY] - BNGFrame.Layers[layer].TileDataOffsets[tileX, tileY];
-                        }
+                        log.Append(tleNum);
+                        log.AppendLine(new string('-', 40 - tleNum.Length));
+                        ulong tleSzPacked = BNGFrame.Layers[layer].TileDataLengths[tileX, tileY];
                         BNGFrame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
                         var corrTileSize = CalculateTileDimensionForCoordinate((BNGFrame.Layers[layer].Width, BNGFrame.Layers[layer].Height)
                             , (BNGFrame.Layers[layer].BaseTileDimension.w, BNGFrame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
                         BNGFrame.Layers[layer].TileDimensions[tileX, tileY] = corrTileSize;
-                        tleWzUnPacked = (ulong)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8);
-                        tileInfo.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
-                        tileInfo.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
-                        tileInfo.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
-                        tileInfo.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
-                        tileDataLength += tleSzPacked;
+                        uint tleWzUnPacked = (uint)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8);
+                        log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
+                        log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
+                        log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
+                        log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
                     }
                 }
 
-                log.AppendLine(string.Format("Data size (bytes)....: {0}", (layer + 1 >= BNGFrame.Layers.Count ? tileDataLength : BNGFrame.LayerDataOffsets[layer + 1]) - BNGFrame.LayerDataOffsets[layer]));
-                log.AppendLine(string.Format("Uncompressed size (\"): {0}", BNGFrame.Layers[layer].Width * BNGFrame.Layers[layer].Height * CalculateBitsPerPixel(BNGFrame.Layers[layer].PixelFormat, BNGFrame.Layers[layer].BitsPerChannel) / 8));
-                log.AppendLine(string.Format("Number of tiles......: {0}", BNGFrame.Layers[layer].TileDataOffsets.LongLength));
-                log.Append(tileInfo.ToString());
-
-                BNGFrame.DataLength = tileDataLength;
+                BNGFrame.DataLength += BNGFrame.LayerDataLengths[layer];
             }
 
             //Point stream to the start of the tile data
@@ -451,7 +446,6 @@
 
         public void AddLayer(string ImportFileName, ImportParameters Options) {
             BNGFrame.Layers ??= new();
-            BNGFrame.LayerDataOffsets ??= new();
             PrepareRAWFileToLayer(ImportFileName, (RAWImportParameters)Options);
         }
         public void WriteBNGFrame(ref Stream OutputStream) {
@@ -481,6 +475,7 @@
             OutputStream.Write(BitConverter.GetBytes((uint)0));
 
             if (BNGFrame.Layers == null) throw new NullReferenceException(string.Format(nameof(BNGFrame.Layers)));
+            BNGFrame.LayerDataLengths = new ulong[BNGFrame.Layers.Count];
             for (int LayerID = 0; LayerID < BNGFrame.Layers.Count; LayerID++) {
                 var BytesPerPixel = BNGFrame.Layers[LayerID].BitsPerPixel / 8;
                 var stride = BNGFrame.Layers[LayerID].Width * BytesPerPixel;
@@ -488,8 +483,10 @@
                 var numTilesY = BNGFrame.Layers[LayerID].TileDataOffsets.GetLongLength(1);
                 var tileSize = CalculateTileDimension(BNGFrame.Layers[LayerID].PixelFormat, BNGFrame.Layers[LayerID].BitsPerChannel);
                 long bytesWritten = 0;
+
+                BNGFrame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
+
                 Stream InputStream = new FileStream(BNGFrame.Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
-                BNGFrame.LayerDataOffsets[LayerID] = (ulong)OutputStream.Position;
 
                 Stopwatch sw = new();
                 sw.Start();
@@ -517,9 +514,9 @@
                             ProgressChangedEvent?.Invoke(progress);
                         }
 
-                        BNGFrame.Layers[LayerID].TileDataOffsets[x, y] = (ulong)OutputStream.Position;
-
                         Compress(BNGFrame.Layers[LayerID].Compression, BNGFrame.Layers[LayerID].CompressionLevel, BNGFrame.Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
+                        BNGFrame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
+                        BNGFrame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
 
                         OutputStream.Write(cBuff);
                     }
@@ -657,7 +654,6 @@
             newLayer.TileDataOffsets = new ulong[numTilesX + 1 , numTilesY + 1];
             newLayer.BaseTileDimension = tileSize;
 
-            BNGFrame.LayerDataOffsets?.Add(0);
             BNGFrame.Layers.Add(newLayer);
 
             return (ulong)BNGFrame.Layers.Count - 1;
