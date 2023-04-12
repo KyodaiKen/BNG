@@ -30,19 +30,21 @@ namespace BNG_CLI {
         public double SrcResolutionH { get; set; } = 72;
         [Option("src-res-v", Required = false, HelpText = "Source vertical resolution in dpi", Default = 72)]
         public double SrcResolutionV { get; set; } = 72;
-        [Option('c', "compressor", Required = false, HelpText = "Compression algorithm: None, GZIP, ZLIB, Brotli, ZSTD, ArithmeticOrder0, LZ4, LZMA", Default = Compression.ZSTD)]
-        public Compression Compression { get; set; } = Compression.ZSTD;
-        [Option('f', "filter", Required = false, HelpText = "Compression filter: None, Sub, Up, Average, Paeth", Default = CompressionPreFilter.Paeth)]
-        public CompressionPreFilter CompressionFilter { get; set; } = CompressionPreFilter.Paeth;
-        [Option('l', "level", Required = false, HelpText = "Compression level", Default = 8)]
-        public int CompressionLevel { get; set; } = 8;
+        [Option('c', "compressor", Required = false, HelpText = "Compression algorithm: None, Brotli, ZSTD", Default = Compression.Brotli)]
+        public Compression Compression { get; set; } = Compression.Brotli;
+        [Option('f', "filter", Required = false, HelpText = "Compression filter: None, Sub, Up, Average, Paeth", Default = CompressionPreFilter.Up)]
+        public CompressionPreFilter CompressionFilter { get; set; } = CompressionPreFilter.Up;
+        [Option('l', "level", Required = false, HelpText = "Compression level", Default = 6)]
+        public int CompressionLevel { get; set; } = 6;
 
         [Option("uncompressed-header", Required = false, HelpText = "Disable header compression")]
         public bool UncompressedHeader { get; set; }
         [Option("optimize-streaming", Required = false, HelpText = "Optimize for streaming. Repacks the file and puts the headers at the beginning of each frame.")]
         public bool OptimizeStreaming { get; set; }
-        [Option("repack-in-memory", Required = false, HelpText = "Repacks each frame of the output file in memory. Enter the maximum memory percantage to be used. If it would be exceeded, file repacking is used.", Default = 65)]
+        [Option("repack-in-memory", Required = false, HelpText = "Repacks each frame of the output file in memory. Enter the maximum memory percantage to be used. If it would be exceeded, file repacking is used.", Default = 80)]
         public float RepackInRAM { get; set; }
+        [Option("tsf", Required = false, HelpText = "Tile size multiplicator. Only integers allowed.", Default = 1)]
+        public float TileSizeFactor { get; set; } = 1;
     }
     class Program {
         static int Main(string[] args) {
@@ -50,7 +52,6 @@ namespace BNG_CLI {
             sw.Start();
 
             TextWriter Help = new StringWriter();
-            Parser cmdParser = new Parser(why);
 
             Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en-us");
             Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("en-us");
@@ -59,7 +60,10 @@ namespace BNG_CLI {
             void why(ParserSettings fy) {
                 fy.HelpWriter = Help;
                 fy.CaseSensitive = false;
+                fy.CaseInsensitiveEnumValues = true;
+                fy.ParsingCulture = Thread.CurrentThread.CurrentCulture;
             }
+            Parser cmdParser = new Parser(why);
 
             var parms = cmdParser.ParseArguments<Options>(args);
             parms.WithParsed(o => {
@@ -77,8 +81,9 @@ namespace BNG_CLI {
                         , CompressionPreFilter = o.CompressionFilter
                         , Compression = o.Compression
                         , CompressionLevel = o.CompressionLevel
-                        , Flags = (o.OptimizeStreaming ? BNG_FLAGS.STREAMING_OPTIMIZED : 0) | (o.UncompressedHeader ? 0 : BNG_FLAGS.COMPRESSED_HEADER)
+                        , Flags = (o.OptimizeStreaming ? Flags.STREAMING_OPTIMIZED : 0) | (o.UncompressedHeader ? 0 : Flags.COMPRESSED_HEADER)
                         , MaxRepackMemoryPercentage = o.RepackInRAM
+                        , TileSizeFactor = o.TileSizeFactor
                         });
 
                         void pChanged(double progress) {
@@ -90,6 +95,7 @@ namespace BNG_CLI {
 
                         Stream outFile = new FileStream(o.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
                         BNG.WriteBNGFrame(ref outFile);
+
                         outFile.Close();
                         outFile.Dispose();
                         break;
