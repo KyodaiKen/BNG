@@ -79,29 +79,31 @@ namespace BNG_CLI {
                 Help.WriteLine("    bpc=   (Default=8)                RAW image Bits per CHANNEL    { 8, 16, 32, 64 }");
 
                 Help.WriteLine("\n  Frame\n");
-                Help.WriteLine("    frnm=  (Default=Filename w/o ext) Frame name                    Free text");
+                Help.WriteLine("    frnm=  (Default=Empty)            Frame name                    Free text");
                 Help.WriteLine("    frdc=  (Default=Empty)            Frame description             Free text");
+                Help.WriteLine("    cw=    (Default=Auto)             Frame canvas width            Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    ch=    (Default=Auto)             Frame canvas height           Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    frdur= (Default=1/15)             Frame display duration        Seconds with decimal places");
                 Help.WriteLine("    fropn= (Default=0)                Enter 1 if you want to add more layers to this frame with future inputs");
 
                 Help.WriteLine("\n  Layer\n");
-                Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current frame");
                 Help.WriteLine("    lnm=   (Default=Filename w/o ext) Layer name                    Free text");
                 Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
                 Help.WriteLine("    lox=   (Required)                 Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    loy=   (Required)                 Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
-                Help.WriteLine("    lcf=   (Default=1)                Enter 1 if you want this layer to be the last in the current frame");
+                Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
+                Help.WriteLine("    lcf=   (Default=1)                Enter 1 if you want this layer to close the current OPEN frame");
 
-                Help.WriteLine("\n  Output\n");
+                Help.WriteLine("\n  Compression and file layout\n");
                 Help.WriteLine("    flt=   (Default=Up)               Compression pre-filter        { Sub, Up, Average, Paeth }");
                 Help.WriteLine("    compr= (Default=Brotli)           Compression algorithm         { Brotli, ZSTD }");
                 Help.WriteLine("    level= (Default=6)                Compression level             Brotli: 0...11, ZSTD: 1 ... 22");
                 Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            1...24");
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
-                               "                                                                    If more is needed than set here, a temporary file in the destination path is used\n"+
-                               "                                                                    instead.");
+                               "                                                                    If more is needed than set here, a temporary file in the\n"+
+                               "                                                                    destination path is used instead.");
 
 
                 FindArg("-i", FoundMI, NotFoundMI);
@@ -176,6 +178,34 @@ namespace BNG_CLI {
                                         break;
                                     case "frdc":
                                         fileinfo.importParameters.FrameDescription = tuple[1];
+                                        break;
+                                    case "cw":
+                                        uint cw = 0;
+                                        if (!uint.TryParse(tuple[1], out cw)) {
+                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (cw < 0) {
+                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.FrameWidth = cw;
+                                        break;
+                                    case "ch":
+                                        uint ch = 0;
+                                        if (!uint.TryParse(tuple[1], out cw)) {
+                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (cw < 0) {
+                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.FrameHeight = ch;
                                         break;
                                     case "frdur":
                                         long fDur = 0;
@@ -452,10 +482,12 @@ namespace BNG_CLI {
                     Bitmap BNG = new Bitmap();
                     BNG.ProgressChangedEvent += pChanged;
 
-                    void pChanged(double progress) {
+                    void pChanged(double progress, (long item, long items) itemProgress) {
                         Console.CursorLeft = 0;
-                        Console.Write(string.Format("{0:0.00}%", progress));
+                        Console.Write(string.Format("{1} / {2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
                     }
+
+                    long frame = 0;
 
                     foreach (FileSource f in p.InputFiles) {
                         Stopwatch fsw = new();
@@ -464,23 +496,30 @@ namespace BNG_CLI {
                         if (f.importParameters.OpenFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
+                            frame++;
+                            Console.WriteLine(string.Format("New Frame {0}:", frame));
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
                             BNG.AddLayer(f.pathName, f.importParameters);
                         } else if (f.importParameters.LayerToCurrentFrame) {
-                            BNG.AddLayer(f.pathName, f.importParameters);
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
+                            BNG.AddLayer(f.pathName, f.importParameters);
                             Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
 
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame) {
                             Console.WriteLine("Compressing file:");
                             BNG.WriteBNGFrame(ref outFile);
+                            BNG.Dispose();
                         }
                         if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.OpenFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
+                            frame++;
+                            Console.WriteLine(string.Format("New Frame {0}:", frame));
                             BNG.AddLayer(f.pathName, f.importParameters);
                             Console.WriteLine("Compressing " + Path.GetFileName(f.pathName) + ":");
                             BNG.WriteBNGFrame(ref outFile);
+                            BNG.Dispose();
                         }
 
                         Console.CursorLeft = 0;
@@ -498,13 +537,13 @@ namespace BNG_CLI {
                     Console.WriteLine(log.ToString());
 
                     Stream outFileDec = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                    void pChangedDec(double progress) {
+                    void pChangedDec(double progress, (long item, long items) itemProgress) {
                         Console.CursorLeft = 0;
                         Console.Write(string.Format("{0:0.00}%", progress));
                     }
 
                     BNGToDecode.ProgressChangedEvent += pChangedDec;
-                    BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0, 0);
+                    BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0);
 
                     outFileDec.Flush();
                     outFileDec.Close();

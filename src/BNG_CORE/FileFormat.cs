@@ -151,6 +151,8 @@
         public bool LayerClosesFrame { get; set; } = false;
         public string FrameName { get; set; } = string.Empty;
         public string FrameDescription { get; set; } = string.Empty;
+        public uint FrameWidth { get; set; }
+        public uint FrameHeight { get; set; }
         public double FrameDuration { get; set; } = 1 / 15;
         public (uint x, uint y) LayerOffset { get; set; } = (0, 0);
         public double LayerOpacity { get; set; } = 1.0;
@@ -173,7 +175,7 @@
 
         public bool Strict { get; set; } = false;
 
-        public delegate void dgProgressChanged(double progress);
+        public delegate void dgProgressChanged(double progress, (long item, long items) itemProgress);
         public dgProgressChanged ProgressChangedEvent { get; set; }
 
         public Bitmap() {
@@ -334,7 +336,7 @@
             }
         }
 
-        public void DecodeFrameToRaw(ref Stream InputStream, ref Stream OutputStream, int FrameID, int LayerID) {
+        public void DecodeFrameToRaw(ref Stream InputStream, ref Stream OutputStream, int LayerID) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
@@ -359,7 +361,7 @@
                     var progress = (double)bytesWrittenForProgress / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
                     if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
                         sw.Restart();
-                        ProgressChangedEvent?.Invoke(progress);
+                        ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
                     }
                 }
             }
@@ -550,7 +552,7 @@
 
                 Stopwatch sw = new();
                 sw.Start();
-                ProgressChangedEvent?.Invoke(0);
+                ProgressChangedEvent?.Invoke(0, (LayerID + 1, Frame.Layers.Count));
                 for (uint y = 0; y < numTilesY; y++) {
                     for (uint x = 0; x < numTilesX; x++) {
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, (x, y));
@@ -576,7 +578,7 @@
                         var progress = (double)bytesWritten / InputStream.Length * 100.0;
                         if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
                             sw.Restart();
-                            ProgressChangedEvent?.Invoke(progress);
+                            ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
                         }
 
                         oStream.Write(cBuff);
@@ -698,18 +700,33 @@
         /// <exception cref="NullReferenceException"></exception>
         /// <exception cref="NotImplementedException"></exception>
         public ulong PrepareRAWFileToLayer(string RAWFileName, RAWImportParameters ImportParameters) {
-            Frame.Width = ImportParameters.SourceDimensions.w;
-            Frame.Height = ImportParameters.SourceDimensions.h;
+            Frame.Width = ImportParameters.FrameWidth;
+            Frame.Height = ImportParameters.FrameHeight;
             Frame.Flags = ImportParameters.Flags;
             Frame.TileSizeFactor = ImportParameters.TileSizeFactor;
             Frame.MaxRepackMemoryPercentage = ImportParameters.MaxRepackMemoryPercentage;
             Frame.Name = ImportParameters.FrameName;
             Frame.Description = ImportParameters.FrameDescription;
 
+            //Ensure that layer fits inside canvas
+            if (ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w > Frame.Width) {
+                Frame.Width = ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w;
+            }
+            if (ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h > Frame.Height) {
+                Frame.Height = ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h;
+            }
+
             var newLayer = new Layer();
 
             newLayer.SourceFileName = RAWFileName;
-            newLayer.Name = ImportParameters.LayerName;
+
+            if (ImportParameters.LayerName == "") {
+                newLayer.Name = Path.GetFileNameWithoutExtension(RAWFileName);
+            }
+            else {
+                newLayer.Name = ImportParameters.LayerName;
+            }
+
             newLayer.Description = ImportParameters.LayerDescription;
             newLayer.Width = ImportParameters.SourceDimensions.w;
             newLayer.Height = ImportParameters.SourceDimensions.h;
