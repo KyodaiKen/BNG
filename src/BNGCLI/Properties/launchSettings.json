@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i \"fn=screenshot.data,w=3840,h=2160\" screenshot.bng",
+      "commandLineArgs": "-e -i fn=gauntlets-8025x3500xRGB24.data,w=8025,h=3500,frpn=1;schreenshot.data,w=3840,h=2160,ltc=1,lcf=1,ensop=80 test.bng",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

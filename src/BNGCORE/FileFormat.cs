@@ -183,19 +183,17 @@
         }
 
         #region Loading
-        public void LoadBNG(ref Stream InputStream, out StringBuilder log) {
+        public void LoadBNG(ref Stream InputStream, out StringBuilder log, out FrameHeader header) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
 
-            InputStream.Seek(0, SeekOrigin.Begin);
-
             log = new StringBuilder();
 
             //Read first 3 byte and check if it's the BNG identifier
-            byte[] ident = new byte[3];
-            byte[] identCompare = { 0x42, 0x4e, 0x47 };
-            InputStream.Read(ident);
+            byte[] ident = new byte[4];
+            byte[] identCompare = { 0x42, 0x4e, 0x47, 0x00 };
+            InputStream.Read(ident, 0, 3);
 
             //Read the info byte
             byte infoByte = (byte)InputStream.ReadByte();
@@ -203,7 +201,7 @@
             Frame.Version = (byte)(infoByte >> 4);
             Frame.Flags = (Flags)(infoByte & 0x0F);
 
-            if (ident != identCompare) {
+            if (BitConverter.ToUInt32(ident) != BitConverter.ToUInt32(identCompare)) {
                 if(Strict) throw new InvalidDataException("This is not a BNG file!");
             }
 
@@ -268,6 +266,8 @@
             Frame.Flags = (Flags)(infoByte & 0x0F);
 
             log.AppendLine(string.Format("BNG Frame Version....: {0}", Frame.Version));
+            log.AppendLine(string.Format("Fame.................: {0}", Frame.Name));
+            log.AppendLine(string.Format("Description..........: {0}", Frame.Description));
             log.AppendLine(string.Format("Width................: {0}", Frame.Width));
             log.AppendLine(string.Format("Height...............: {0}", Frame.Height));
             log.AppendLine(string.Format("Display time (sec)...: {0}", Frame.DisplayTime));
@@ -334,9 +334,11 @@
             if (!Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
                 InputStream.Position -= (long)(Frame.HeaderOffset + Frame.HeaderLength) - Frame.InitLength;
             }
+
+            header = Frame;
         }
 
-        public void DecodeFrameToRaw(ref Stream InputStream, ref Stream OutputStream, int LayerID) {
+        public void DecodeLayerToRaw(ref Stream InputStream, ref Stream OutputStream, int LayerID) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
