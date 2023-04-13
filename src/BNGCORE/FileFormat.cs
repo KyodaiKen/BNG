@@ -5,6 +5,7 @@
     using System;
     using System.Diagnostics;
     using System.IO.Compression;
+    using System.Reflection.Emit;
     using System.Text;
     using ZstdSharp;
 
@@ -89,6 +90,8 @@
         public uint OffsetY { get; set; } = 0;
         public uint Width { get; set; } = 0;
         public uint Height { get; set; } = 0;
+        public double ScaleX { get; set; } = 1.0f;
+        public double ScaleY { get; set; } = 1.0f;
         public List<DataBlock>? ExtraData { get; set; }
         public ulong[,] TileDataLengths { get; set; }
         public (uint w, uint h) BaseTileDimension { get; set; }
@@ -119,16 +122,18 @@
         [MemoryPackIgnore]
         public float TileSizeFactor { get; set; } = 1;
         [MemoryPackIgnore]
-        public float MaxRepackMemoryPercentage { get; set; } = 80;
+        public float MaxRepackMemoryPercentage { get; set; }
 
-
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public uint Width { get; set; } = 0;
-        public uint Height { get; set; } = 0;
+        public string Name { get; set; }
+        public string Description { get; set; }
+        public uint Width { get; set; }
+        public uint Height { get; set; }
         public double ResolutionH { get; set; }
         public double ResolutionV { get; set; }
-        public double DisplayTime { get; set; } = 1 / 12; // Frame display time in seconds for animations
+        public double DisplayTime { get; set; }
+        public ColorSpace CompositingColorSpace { get; set; } = 0;
+        public uint CompositingBitsPerChannel { get; set; } = 0;
+        public PixelFormat CompositingPixelFormat { get; set; } = 0;
         public List<DataBlock>? Metadata { get; set; }
         public ulong[] LayerDataLengths { get; set; }
         public List<Layer>? Layers { get; set; }
@@ -136,9 +141,9 @@
 
 
     public partial class ImportParameters {
-        public ColorSpace TargetColorSpace { get; set; } = ColorSpace.RGB;
-        public uint TargetBitsPerChannel { get; set; } = 8;
-        public PixelFormat TargetDataType { get; set; } = PixelFormat.IntegerUnsigned;
+        public ColorSpace CompositingColorSpace { get; set; } = 0;
+        public uint CompositingBitsPerChannel { get; set; } = 0;
+        public PixelFormat CompositingPixelFormat { get; set; } = 0;
         public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Up;
         public Compression Compression { get; set; } = Compression.Brotli;
         public int CompressionLevel { get; set; } = 6;
@@ -155,6 +160,7 @@
         public uint FrameHeight { get; set; }
         public double FrameDuration { get; set; } = 1 / 15;
         public (uint x, uint y) LayerOffset { get; set; } = (0, 0);
+        public (double x, double y) LayerScale { get; set; } = (1.0f, 1.0f);
         public double LayerOpacity { get; set; } = 1.0;
         public LayerBlendMode LayerBlendMode { get; set; } = LayerBlendMode.Normal;
         public Flags Flags { get; set;} = 0;
@@ -174,6 +180,7 @@
         private bool disposedValue;
 
         public bool Strict { get; set; } = false;
+        public int VerboseLevel { get; set; } = 0;
 
         public delegate void dgProgressChanged(double progress, (long item, long items) itemProgress);
         public dgProgressChanged ProgressChangedEvent { get; set; }
@@ -265,41 +272,52 @@
             Frame.Version = (byte)(infoByte >> 4);
             Frame.Flags = (Flags)(infoByte & 0x0F);
 
-            log.AppendLine(string.Format("BNG Frame Version....: {0}", Frame.Version));
-            log.AppendLine(string.Format("Fame.................: {0}", Frame.Name));
-            log.AppendLine(string.Format("Description..........: {0}", Frame.Description));
-            log.AppendLine(string.Format("Width................: {0}", Frame.Width));
-            log.AppendLine(string.Format("Height...............: {0}", Frame.Height));
-            log.AppendLine(string.Format("Display time (sec)...: {0}", Frame.DisplayTime));
-            log.AppendLine(string.Format("Horizontal resolution: {0}", Frame.ResolutionH));
-            log.AppendLine(string.Format("Vertical resolution..: {0}", Frame.ResolutionV));
-            log.AppendLine(string.Format("Number of layers.....: {0}", Frame.Layers.Count));
+            if (VerboseLevel > 0) {
+                log.AppendLine("\n"+string.Format("BNG Frame Version....: {0}", Frame.Version));
+                log.AppendLine(string.Format("Fame.................: {0}", Frame.Name));
+                log.AppendLine(string.Format("Description..........: {0}", Frame.Description));
+                log.AppendLine(string.Format("Width................: {0}", Frame.Width));
+                log.AppendLine(string.Format("Height...............: {0}", Frame.Height));
+                log.AppendLine(string.Format("Display time (sec)...: {0}", Frame.DisplayTime));
+                log.AppendLine(string.Format("Horizontal resolution: {0}", Frame.ResolutionH));
+                log.AppendLine(string.Format("Vertical resolution..: {0}", Frame.ResolutionV));
+                log.AppendLine(string.Format("Number of layers.....: {0}", Frame.Layers.Count));
+                log.AppendLine(string.Format("Compositing..........:"));
+                log.AppendLine(string.Format("'-Pixel format.......: {0}", Frame.CompositingColorSpace.ToString()));
+                log.AppendLine(string.Format("'-Bits per channel...: {0}", Frame.CompositingBitsPerChannel));
+                log.AppendLine(string.Format("'-Channel data format: {0}", Frame.CompositingPixelFormat.ToString()));
+            }
 
             Frame.LayerDataOffsets = new ulong[Frame.Layers.Count];
 
             for (int layer = 0; layer < Frame.Layers.Count;  layer++) {
-                string lyrNum = string.Format("Layer {0}", layer) + " ";
                 Frame.LayerDataOffsets[layer] += Frame.LayerDataLengths[layer];
-                log.Append(lyrNum);
-                log.AppendLine(new string('-', 40 - lyrNum.Length));
-                log.AppendLine(string.Format("Layer name...........: {0}", Frame.Layers[layer].Name));
-                log.AppendLine(string.Format("Layer description....: {0}", Frame.Layers[layer].Description));
-                log.AppendLine(string.Format("Offset X.............: {0}", Frame.Layers[layer].OffsetX));
-                log.AppendLine(string.Format("Offset Y.............: {0}", Frame.Layers[layer].OffsetY));
-                log.AppendLine(string.Format("Width................: {0}", Frame.Layers[layer].Width));
-                log.AppendLine(string.Format("Height...............: {0}", Frame.Layers[layer].Height));
-                log.AppendLine(string.Format("Opacity..............: {0}", Frame.Layers[layer].Opacity));
-                log.AppendLine(string.Format("Pixel format.........: {0}", Frame.Layers[layer].ColorSpace.ToString()));
-                log.AppendLine(string.Format("Bits per channel.....: {0}", Frame.Layers[layer].BitsPerChannel));
-                log.AppendLine(string.Format("Channel data format..: {0}", Frame.Layers[layer].PixelFormat.ToString()));
-                log.AppendLine(string.Format("Compression..........: {0}", Frame.Layers[layer].Compression.ToString()));
-                log.AppendLine(string.Format("Pre-filter...........: {0}", Frame.Layers[layer].CompressionPreFilter.ToString()));
-                log.AppendLine(string.Format("Base tile dimension W: {0}", Frame.Layers[layer].BaseTileDimension.w));
-                log.AppendLine(string.Format("Base tile dimension H: {0}", Frame.Layers[layer].BaseTileDimension.h));
-                log.AppendLine(string.Format("Data offset..........: {0}", Frame.LayerDataOffsets[layer]));
-                log.AppendLine(string.Format("Data size (bytes)....: {0}", Frame.LayerDataLengths[layer]));
-                log.AppendLine(string.Format("Uncompressed size (\"): {0}", Frame.Layers[layer].Width * Frame.Layers[layer].Height * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8));
-                log.AppendLine(string.Format("Number of tiles......: {0}", Frame.Layers[layer].TileDataLengths.LongLength));
+                if (VerboseLevel > 0) {
+                    string lyrNum = string.Format("Layer {0}", layer) + " ";
+                    log.Append("\n" + lyrNum);
+                    log.AppendLine(new string('-', 40 - lyrNum.Length));
+                    log.AppendLine(string.Format("Layer name...........: {0}", Frame.Layers[layer].Name));
+                    log.AppendLine(string.Format("Layer description....: {0}", Frame.Layers[layer].Description));
+                    log.AppendLine(string.Format("Offset X.............: {0}", Frame.Layers[layer].OffsetX));
+                    log.AppendLine(string.Format("Offset Y.............: {0}", Frame.Layers[layer].OffsetY));
+                    log.AppendLine(string.Format("Width................: {0}", Frame.Layers[layer].Width));
+                    log.AppendLine(string.Format("Height...............: {0}", Frame.Layers[layer].Height));
+                    log.AppendLine(string.Format("Scale X..............: {0}", Frame.Layers[layer].ScaleX));
+                    log.AppendLine(string.Format("Scale Y..............: {0}", Frame.Layers[layer].ScaleY));
+                    log.AppendLine(string.Format("Opacity..............: {0}", Frame.Layers[layer].Opacity));
+                    log.AppendLine(string.Format("Blend mode...........: {0}", Frame.Layers[layer].BlendMode));
+                    log.AppendLine(string.Format("Pixel format.........: {0}", Frame.Layers[layer].ColorSpace.ToString()));
+                    log.AppendLine(string.Format("Bits per channel.....: {0}", Frame.Layers[layer].BitsPerChannel));
+                    log.AppendLine(string.Format("Channel data format..: {0}", Frame.Layers[layer].PixelFormat.ToString()));
+                    log.AppendLine(string.Format("Compression..........: {0}", Frame.Layers[layer].Compression.ToString()));
+                    log.AppendLine(string.Format("Pre-filter...........: {0}", Frame.Layers[layer].CompressionPreFilter.ToString()));
+                    log.AppendLine(string.Format("Base tile dimension W: {0}", Frame.Layers[layer].BaseTileDimension.w));
+                    log.AppendLine(string.Format("Base tile dimension H: {0}", Frame.Layers[layer].BaseTileDimension.h));
+                    log.AppendLine(string.Format("Data offset..........: {0}", Frame.LayerDataOffsets[layer]));
+                    log.AppendLine(string.Format("Data size (bytes)....: {0}", Frame.LayerDataLengths[layer]));
+                    log.AppendLine(string.Format("Uncompressed size (\"): {0}", Frame.Layers[layer].Width * Frame.Layers[layer].Height * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8));
+                    log.AppendLine(string.Format("Number of tiles......: {0}", Frame.Layers[layer].TileDataLengths.LongLength));
+                }
 
                 var txl = Frame.Layers[layer].TileDataLengths.GetLongLength(0);
                 var tyl = Frame.Layers[layer].TileDataLengths.GetLongLength(1);
@@ -311,19 +329,23 @@
                 for (uint tileY = 0; tileY < tyl; tileY++) {
                     for (uint tileX = 0; tileX < txl; tileX++) {
                         Frame.Layers[layer].TileDataOffsets[tileX, tileY] += Frame.Layers[layer].TileDataLengths[tileX, tileY];
-                        string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
-                        log.Append(tleNum);
-                        log.AppendLine(new string('-', 40 - tleNum.Length));
+                        if (VerboseLevel > 1) {
+                            string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
+                            log.Append("\n"+tleNum);
+                            log.AppendLine(new string('-', 40 - tleNum.Length));
+                        }
                         ulong tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
                         Frame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[layer].Width, Frame.Layers[layer].Height)
                             , (Frame.Layers[layer].BaseTileDimension.w, Frame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
                         Frame.Layers[layer].TileDimensions[tileX, tileY] = corrTileSize;
                         uint tleWzUnPacked = (uint)(corrTileSize.w * corrTileSize.h * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8);
-                        log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
-                        log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
-                        log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
-                        log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
+                        if (VerboseLevel > 1) {
+                            log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
+                            log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
+                            log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
+                            log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
+                        }
                     }
                 }
 
@@ -707,15 +729,33 @@
             Frame.Flags = ImportParameters.Flags;
             Frame.TileSizeFactor = ImportParameters.TileSizeFactor;
             Frame.MaxRepackMemoryPercentage = ImportParameters.MaxRepackMemoryPercentage;
+            Frame.DisplayTime = ImportParameters.FrameDuration;
+            Frame.ResolutionH = ImportParameters.Resolution.h;
+            Frame.ResolutionV = ImportParameters.Resolution.v;
+
+            //Make sure the canvas / composite pixel format is set accordingly (If none is set, takes the first layer's values)
+            if (Frame.CompositingColorSpace == 0 || Frame.CompositingBitsPerChannel == 0 || Frame.CompositingPixelFormat == 0) {
+                if (ImportParameters.CompositingColorSpace == 0 || ImportParameters.CompositingBitsPerChannel == 0 || ImportParameters.CompositingPixelFormat == 0) {
+                    if (ImportParameters.CompositingColorSpace == 0) Frame.CompositingColorSpace = ImportParameters.SourceColorSpace;
+                    if (ImportParameters.CompositingBitsPerChannel == 0) Frame.CompositingBitsPerChannel = ImportParameters.SourceBitsPerChannel;
+                    if (ImportParameters.CompositingPixelFormat == 0) Frame.CompositingPixelFormat = ImportParameters.SourcePixelFormat;
+                }
+                else {
+                    Frame.CompositingColorSpace = ImportParameters.CompositingColorSpace;
+                    Frame.CompositingBitsPerChannel = ImportParameters.CompositingBitsPerChannel;
+                    Frame.CompositingPixelFormat = ImportParameters.CompositingPixelFormat;
+                }
+            }
+
             Frame.Name = ImportParameters.FrameName;
             Frame.Description = ImportParameters.FrameDescription;
 
             //Ensure that layer fits inside canvas
-            if (ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w > Frame.Width) {
-                Frame.Width = ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w;
+            if ((double)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w * ImportParameters.LayerScale.x) > Frame.Width) {
+                Frame.Width = (uint)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w * ImportParameters.LayerScale.x);
             }
-            if (ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h > Frame.Height) {
-                Frame.Height = ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h;
+            if ((double)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h * ImportParameters.LayerScale.y) > Frame.Height) {
+                Frame.Height = (uint)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h * ImportParameters.LayerScale.x);
             }
 
             var newLayer = new Layer();
@@ -732,12 +772,9 @@
             newLayer.Description = ImportParameters.LayerDescription;
             newLayer.Width = ImportParameters.SourceDimensions.w;
             newLayer.Height = ImportParameters.SourceDimensions.h;
-            if (ImportParameters.SourceColorSpace != ImportParameters.TargetColorSpace) throw new NotImplementedException("Color space conversion is not supported yet");
-            newLayer.ColorSpace = ImportParameters.TargetColorSpace;
-            if (ImportParameters.SourceBitsPerChannel != ImportParameters.TargetBitsPerChannel) throw new NotImplementedException("Bit depth conversion is not supported yet");
-            newLayer.BitsPerChannel = ImportParameters.TargetBitsPerChannel;
-            if (ImportParameters.SourcePixelFormat != ImportParameters.TargetDataType) throw new NotImplementedException("Data type conversion is not supported yet");
-            newLayer.PixelFormat = ImportParameters.TargetDataType;
+            newLayer.ColorSpace = ImportParameters.SourceColorSpace;
+            newLayer.BitsPerChannel = ImportParameters.SourceBitsPerChannel;
+            newLayer.PixelFormat = ImportParameters.SourcePixelFormat;
             newLayer.Compression = ImportParameters.Compression;
             newLayer.CompressionLevel = ImportParameters.CompressionLevel;
             newLayer.BrotliWindowSize = ImportParameters.BrotliWindowSize;
@@ -745,6 +782,8 @@
             newLayer.OffsetX = ImportParameters.LayerOffset.x;
             newLayer.OffsetY = ImportParameters.LayerOffset.y;
             newLayer.Opacity = ImportParameters.LayerOpacity;
+            newLayer.ScaleX = ImportParameters.LayerScale.x;
+            newLayer.ScaleY = ImportParameters.LayerScale.y;
             newLayer.BlendMode = ImportParameters.LayerBlendMode;
 
             newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.ColorSpace, newLayer.BitsPerChannel);

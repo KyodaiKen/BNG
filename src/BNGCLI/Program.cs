@@ -44,13 +44,14 @@ namespace BNG_CLI {
             }
 
             uint width = 0, height = 0, lox = 0, loy = 0;
+            double lsx = 1, lsy = 1;
 
             InputFiles = new();
             
 
 
             Help.WriteLine("Usage ------------------------------------------");
-            Help.WriteLine("BNGCLI [-e -i <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation>] [-i <bng file>] <output file name>\n");
+            Help.WriteLine("BNGCLI [-e -i <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation> <output file name>] [-i <bng file> <output path>] \n");
 
             //Scan for encoding task
             Help.Write("-e  Tell the program to go into encode mode. If not set, BNG_CLI will assume a BNG file to be decoded.\n\n");
@@ -84,12 +85,17 @@ namespace BNG_CLI {
                 Help.WriteLine("    ch=    (Default=Auto)             Frame canvas height           Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    frdur= (Default=1/15)             Frame display duration        Seconds with decimal places");
                 Help.WriteLine("    fropn= (Default=0)                Enter 1 if you want to add more layers to this frame with future inputs");
+                Help.WriteLine("    fccs=  (Default=First Layer cs)   Compositing Color space       { RGB, RGBA, YCrCb, YCrCbA, CMYK, CMYKA }");
+                Help.WriteLine("    fcpf=  (Default=First Layer cpf)  Compositing Pixel format      { IntegerUnsigned, IntegerSigned, FloatIEEE }");
+                Help.WriteLine("    fcbpc= (Default=First Layer bpc)  Compositing Bits per CHANNEL  { 8, 16, 32, 64 }");
 
                 Help.WriteLine("\n  Layer\n");
                 Help.WriteLine("    lnm=   (Default=Filename w/o ext) Layer name                    Free text");
                 Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
                 Help.WriteLine("    lox=   (Required)                 Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    loy=   (Required)                 Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    lsx=   (Default=1)                Layer scale X                 Decimal number");
+                Help.WriteLine("    lsy=   (Default=1)                Layer scale Y                 Decimal number");
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
@@ -234,6 +240,42 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.OpenFrame = fropn == 1;
                                         break;
+                                    case "fccs":
+                                        AssignEnum(typeof(ColorSpace), tuple[1], FCCSNotFound, FCCSFound);
+                                        void FCCSFound(object enumVal) {
+                                            fileinfo.importParameters.CompositingColorSpace = (ColorSpace)enumVal;
+                                        }
+                                        void FCCSNotFound() {
+                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "fcpf":
+                                        AssignEnum(typeof(PixelFormat), tuple[1], FCPFNotFound, FCPFFound);
+                                        void FCPFFound(object enumVal) {
+                                            fileinfo.importParameters.CompositingPixelFormat = (PixelFormat)enumVal;
+                                        }
+                                        void FCPFNotFound() {
+                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "fcbpc":
+                                        uint fcbpc = 0;
+                                        if (!uint.TryParse(tuple[1], out fcbpc)) {
+                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            ErrorState = true;
+                                            break;
+                                        }
+                                        if (fcbpc != 0 || fcbpc != 8 || fcbpc != 16 || fcbpc != 32 | fcbpc != 64) {
+                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            ErrorState = true;
+                                            break;
+                                        }
+                                        else {
+                                            fileinfo.importParameters.CompositingBitsPerChannel = fcbpc;
+                                        }
+                                        break;
                                     case "ltc":
                                         int ltc = 0;
                                         if (!int.TryParse(tuple[1], out ltc)) {
@@ -263,6 +305,20 @@ namespace BNG_CLI {
                                         break;
                                     case "loy":
                                         if (!uint.TryParse(tuple[1], out loy)) {
+                                            Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "lsx":
+                                        if (!double.TryParse(tuple[1], out lsx)) {
+                                            Output.WriteLine("Error: Illegal number for lox. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        break;
+                                    case "lsy":
+                                        if (!double.TryParse(tuple[1], out lsy)) {
                                             Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
@@ -378,6 +434,7 @@ namespace BNG_CLI {
 
                             fileinfo.importParameters.SourceDimensions = (width, height);
                             fileinfo.importParameters.LayerOffset = (lox, loy);
+                            fileinfo.importParameters.LayerScale = (lsx, lsy);
                             fileinfo.outputDirectory = "";
 
                             InputFiles.Add(fileinfo);
@@ -391,8 +448,8 @@ namespace BNG_CLI {
             } else {
                 //Decode
                 Help.WriteLine("Options for decoding--------------------------------------\n");
-                Help.WriteLine("BNGCLI -i \"fn=myfile.bng;fn=my other file.bng\" n:\\my\\output\\path");
-                Help.WriteLine("-i  File names in \"fn=aaa;fn=bbb\" notation");
+                Help.WriteLine("BNGCLI -i \"myfile.bng;my other file.bng\" n:\\my\\output\\path");
+                Help.WriteLine("-i  File names in \"aaa;bbb\" notation");
 
                 FindArg("-i", FoundDI, NotFoundDI);
                 void FoundDI(long index) {
@@ -510,6 +567,8 @@ namespace BNG_CLI {
 
                     void pChanged(double progress, (long item, long items) itemProgress) {
                         Console.CursorLeft = 0;
+                        Console.Write(new string(' ', Console.WindowWidth));
+                        Console.CursorLeft = 0;
                         Console.Write(string.Format("{1} / {2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
                     }
 
@@ -560,11 +619,12 @@ namespace BNG_CLI {
                     long fi = 0;
                     foreach (var file in p.InputFiles) {
                         fi++;
-                        Console.WriteLine(string.Format("Processing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)));
+                        Console.WriteLine(string.Format("\nProcessing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)) + "\n");
 
                         Bitmap BNGToDecode = new Bitmap();
                         StringBuilder info = new();
                         BNGToDecode.Strict = true;
+                        BNGToDecode.VerboseLevel = 1;
                         Stream inFile = new FileStream(file.pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000);
 
                         long cf = 0;
@@ -573,8 +633,10 @@ namespace BNG_CLI {
                             try {
                                 FrameHeader bng;
                                 BNGToDecode.LoadBNG(ref inFile, out info, out bng);
-                                
-                                Console.Write(info.ToString());
+
+                                string frTitle = string.Format("Found BNG frame {0}", cf);
+                                Console.Write(frTitle + new string('=', 40 - frTitle.Length));
+                                Console.WriteLine(info.ToString());
                                 for (var layer  = 0; layer < bng.Layers.Count; layer++) {
                                     //Determine output file name
                                     string outNamePortion = string.Empty;
@@ -584,6 +646,8 @@ namespace BNG_CLI {
 
                                     Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
                                     void pChangedDec(double progress, (long item, long items) itemProgress) {
+                                        Console.CursorLeft = 0;
+                                        Console.Write(new string(' ', Console.WindowWidth));
                                         Console.CursorLeft = 0;
                                         Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
                                     }
@@ -605,30 +669,6 @@ namespace BNG_CLI {
                         inFile.Close();
                         inFile.Dispose();
                     }
-
-                    /*
-                    Bitmap BNGToDecode = new Bitmap();
-                    Stream inFile = new FileStream(p.InputFiles[0].pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0xFF00000);
-                    StringBuilder log;
-                    BNGToDecode.LoadBNG(ref inFile, out log);
-                    Console.WriteLine(log.ToString());
-
-                    Stream outFileDec = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                    void pChangedDec(double progress, (long item, long items) itemProgress) {
-                        Console.CursorLeft = 0;
-                        Console.Write(string.Format("{0:0.00}%", progress));
-                    }
-
-                    BNGToDecode.ProgressChangedEvent += pChangedDec;
-                    BNGToDecode.DecodeFrameToRaw(ref inFile, ref outFileDec, 0);
-
-                    outFileDec.Flush();
-                    outFileDec.Close();
-                    outFileDec.Dispose();
-
-                    inFile.Close();
-                    inFile.Dispose();
-                    */
                     break;
             }
             
