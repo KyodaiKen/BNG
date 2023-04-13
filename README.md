@@ -6,11 +6,10 @@ Better Network Graphics / Borg Network Graphics
 - Multi threading not developed yet
 - Encoding and decoding of raw images (raw pixel data) working! Tests look promising!
 - Layer compositing not implemented yet
-- CLI cannot deal with multiple images (frames) yet
 
 ## Supports:
 - Pixel formats: Gray/Alpha only, Gray with Alpha, RGB, YCrCb, CMYK, RGBA, YCrCbA, CMYKA
-- Bit depths: Integer(8, 16 BE, 16 LE) per channel, IEEE Float(32, 64) per channel, legacy 16bit RGB (555,565), YCrCb packed subsampling (4:1:0 9bit, 4:2:0 12bit, 4:2:2 16bit, 4:4:4 24 bit)
+- Bit depths: Integer(8, 16 BE, 16 LE) per channel, IEEE Float(32, 64) per channel
 - Animations with up to 2,147,483,648 frames
 - Up to 2,147,483,648 named layers each frame with description for extended notes or others
 - Image data partitioning in tiles for files that don't fit in memory (NASA, hobby astronomy, etc.)
