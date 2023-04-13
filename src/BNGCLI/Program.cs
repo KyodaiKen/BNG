@@ -569,7 +569,7 @@ namespace BNG_CLI {
                         Console.CursorLeft = 0;
                         Console.Write(new string(' ', Console.WindowWidth));
                         Console.CursorLeft = 0;
-                        Console.Write(string.Format("{1} / {2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
+                        Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
                     }
 
                     long frame = 0;
@@ -583,18 +583,19 @@ namespace BNG_CLI {
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
                             Console.WriteLine(string.Format("New Frame {0}:", frame));
-                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
                             BNG.AddLayer(f.pathName, f.importParameters);
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
-                            Console.WriteLine("\nAdding layer " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
                             BNG.AddLayer(f.pathName, f.importParameters);
-                            Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
-                            Console.WriteLine("Compressing file:");
+                            Console.WriteLine("Writing file:");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            Console.CursorLeft = 0;
+                            Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
@@ -602,13 +603,12 @@ namespace BNG_CLI {
                             frame++;
                             Console.WriteLine(string.Format("Writing Frame {0}:", frame));
                             BNG.AddLayer(f.pathName, f.importParameters);
-                            Console.WriteLine("Compressing layer from " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            Console.CursorLeft = 0;
+                            Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
-
-                        Console.CursorLeft = 0;
-                        Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         fsw.Stop();
                     }
                     outFile.Close();
