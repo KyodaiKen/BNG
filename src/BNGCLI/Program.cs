@@ -99,7 +99,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
-                Help.WriteLine("    lcf=   (Default=1)                Enter 1 if you want this layer to close the current OPEN frame");
+                Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
 
                 Help.WriteLine("\n  Compression and file layout\n");
                 Help.WriteLine("    flt=   (Default=Paeth)            Compression pre-filter        { Sub, Up, Average, Paeth }");
@@ -578,37 +578,37 @@ namespace BNG_CLI {
                         Stopwatch fsw = new();
                         fsw.Start();
                         
-                        if (f.importParameters.OpenFrame) {
+                        if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
                             Console.WriteLine(string.Format("New Frame {0}:", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
                             BNG.AddLayer(f.pathName, f.importParameters);
-                        } else if (f.importParameters.LayerToCurrentFrame) {
-                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName) + ":");
+                        }
+                        if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
+                            Console.WriteLine("\nAdding layer " + Path.GetFileName(f.pathName) + ":");
                             BNG.AddLayer(f.pathName, f.importParameters);
                             Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
-
-                        if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame) {
+                        if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
                             Console.WriteLine("Compressing file:");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                         }
-                        if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.OpenFrame) {
+                        if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("New Frame {0}:", frame));
+                            Console.WriteLine(string.Format("Writing Frame {0}:", frame));
                             BNG.AddLayer(f.pathName, f.importParameters);
-                            Console.WriteLine("Compressing " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine("Compressing layer from " + Path.GetFileName(f.pathName) + ":");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                         }
 
                         Console.CursorLeft = 0;
-                        Console.WriteLine(string.Format("Done, processing took {0}", fsw.Elapsed));
+                        Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         fsw.Stop();
                     }
                     outFile.Close();
