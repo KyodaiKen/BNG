@@ -144,8 +144,8 @@ namespace BNGCORE {
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Up;
-        public Compression Compression { get; set; } = Compression.Brotli;
+        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Paeth;
+        public Compression Compression { get; set; } = Compression.LZW;
         public int CompressionLevel { get; set; } = 6;
         public int BrotliWindowSize { get; set; } = 0;
         public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
