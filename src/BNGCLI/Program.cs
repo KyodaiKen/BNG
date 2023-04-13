@@ -513,7 +513,7 @@ namespace BNG_CLI {
             bool inQuotes = false;
             for (int i = 0; i < line.Length; i++) // For each character
             {
-                if (line[i] == '\"') // Quotes are closing or opening
+                if (line[i] == '\'') // Quotes are closing or opening
                     inQuotes = !inQuotes;
                 else if (line[i] == by) // Comma
                 {

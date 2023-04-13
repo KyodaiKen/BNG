@@ -291,7 +291,6 @@ namespace BNGCORE {
             Frame.LayerDataOffsets = new ulong[Frame.Layers.Count];
 
             for (int layer = 0; layer < Frame.Layers.Count;  layer++) {
-                Frame.LayerDataOffsets[layer] += Frame.LayerDataLengths[layer];
                 if (VerboseLevel > 0) {
                     string lyrNum = string.Format("Layer {0}", layer) + " ";
                     log.Append("\n" + lyrNum);
@@ -318,6 +317,7 @@ namespace BNGCORE {
                     log.AppendLine(string.Format("Uncompressed size (\"): {0}", Frame.Layers[layer].Width * Frame.Layers[layer].Height * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8));
                     log.AppendLine(string.Format("Number of tiles......: {0}", Frame.Layers[layer].TileDataLengths.LongLength));
                 }
+                Frame.LayerDataOffsets[layer] += Frame.LayerDataLengths[layer];
 
                 var txl = Frame.Layers[layer].TileDataLengths.GetLongLength(0);
                 var tyl = Frame.Layers[layer].TileDataLengths.GetLongLength(1);
