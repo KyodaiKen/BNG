@@ -1,14 +1,13 @@
-﻿namespace BNG_CORE {
-    using BNG_CORE.Filters;
-    using MemoryPack;
-    using MemoryPack.Compression;
-    using System;
-    using System.Diagnostics;
-    using System.IO.Compression;
-    using System.Reflection.Emit;
-    using System.Text;
-    using ZstdSharp;
+﻿using BNGCORE.Compressors;
+using BNGCORE.Filters;
+using MemoryPack;
+using MemoryPack.Compression;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Text;
+using ZstdSharp;
 
+namespace BNGCORE {
     [Flags]
     public enum Flags : byte {
         STREAMING_OPTIMIZED = 1,
@@ -34,7 +33,8 @@
     public enum Compression : byte {
         None   = 0,
         Brotli = 8,
-        ZSTD   = 16
+        ZSTD   = 16,
+        LZW    = 32
     }
 
     public enum ColorSpace : byte {
@@ -457,8 +457,15 @@
                     bd.Decompress(compressedBuffer.ToArray(), decompressedBuffer, out consumed, out written);
                     break;
                 case Compression.ZSTD:
-                    ZstdSharp.Decompressor zstdDeCompressor = new ZstdSharp.Decompressor();
+                    Decompressor zstdDeCompressor = new Decompressor();
                     decompressedBuffer = zstdDeCompressor.Unwrap(compressedBuffer.ToArray()).ToArray();
+                    break;
+                case Compression.LZW:
+                    MemoryStream lzwComprBuffer = new(compressedBuffer);
+                    MemoryStream lzwDecomprBuffer = new();
+                    LZW lzwCoder = new();
+                    lzwCoder.Decompress(ref lzwComprBuffer, ref lzwDecomprBuffer);
+                    decompressedBuffer = lzwDecomprBuffer.ToArray();
                     break;
                 case Compression.None:
                     decompressedBuffer = compressedBuffer;
@@ -702,6 +709,12 @@
                 case Compression.ZSTD:
                     Compressor zstdCompressor = new Compressor(compressionLevel);
                     cBuff = zstdCompressor.Wrap(iBuff.ToArray()).ToArray();
+                    break;
+                case Compression.LZW:
+                    MemoryStream lzwComprBuffer = new();
+                    LZW lzwCoder = new();
+                    lzwCoder.Compress(ref iBuff, ref lzwComprBuffer);
+                    cBuff = lzwComprBuffer.ToArray();
                     break;
                 case Compression.None:
                     cBuff = iBuff.ToArray();

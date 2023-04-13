@@ -1,4 +1,4 @@
-﻿using BNG_CORE;
+﻿using BNGCORE;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -103,8 +103,8 @@ namespace BNG_CLI {
 
                 Help.WriteLine("\n  Compression and file layout\n");
                 Help.WriteLine("    flt=   (Default=Up)               Compression pre-filter        { Sub, Up, Average, Paeth }");
-                Help.WriteLine("    compr= (Default=Brotli)           Compression algorithm         { Brotli, ZSTD }");
-                Help.WriteLine("    level= (Default=6)                Compression level             Brotli: 0...11, ZSTD: 1 ... 22");
+                Help.WriteLine("    compr= (Default=Brotli)           Compression algorithm         { Brotli, LZW, ZSTD }");
+                Help.WriteLine("    level= (Default=6)                Compression level             Brotli: 0...11, ZSTD: 1 ... 22, LZW: N/A");
                 Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            1...24");
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
                                "                                                                    If more is needed than set here, a temporary file in the\n"+

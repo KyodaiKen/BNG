@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace BNG_CORE {
+namespace BNGCORE {
     public class MemoryMetrics {
         public double Total;
         public double Used;

@@ -1,4 +1,4 @@
-﻿namespace BNG_CORE.Filters {
+﻿namespace BNGCORE.Filters {
     //https://www.w3.org/TR/PNG-Filters.html
     public static class Sub {
         public static byte Filter(ref byte[] line, long col, int BytesPerPixel) {
