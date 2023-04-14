@@ -7,11 +7,11 @@ using System.Threading.Tasks;
 namespace BNGCORE.Compressors {
     //CREDIT: https://github.com/pevillarreal/LzwCompressor/blob/master/PbvCompressor/PbvCompressorLZW.cs
     public class LZW {
-        private const int MAX_BITS = 14; //maimxum bits allowed to read
+        private const int MAX_BITS = 14; //maimxum bits allowed to read -> original 14
         private const int HASH_BIT = MAX_BITS - 8; //hash bit to use with the hasing algorithm to find correct index
         private const int MAX_VALUE = (1 << MAX_BITS) - 1; //max value allowed based on max bits
         private const int MAX_CODE = MAX_VALUE - 1; //max code possible
-        private const int TABLE_SIZE = 18041; //must be bigger than the maximum allowed by maxbits and prime
+        private const int TABLE_SIZE = 18041; //must be bigger than the maximum allowed by maxbits and prime -> original 18041
 
         private int[] _iaCodeTable = new int[TABLE_SIZE]; //code table
         private int[] _iaPrefixTable = new int[TABLE_SIZE]; //prefix table

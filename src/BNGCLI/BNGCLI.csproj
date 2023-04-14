@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="libpng-sharp" Version="0.1.18" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\BNGCORE\BNGCORE.csproj" />
   </ItemGroup>
 

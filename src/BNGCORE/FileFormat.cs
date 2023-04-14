@@ -65,27 +65,34 @@ namespace BNGCORE {
     public partial class Layer {
         [MemoryPackIgnore]
         public string SourceFileName { get; set; } = string.Empty;
-        public string Name { get; set; } = "layer";
-        public string Description { get; set; } = string.Empty;
-        public ColorSpace ColorSpace { get; set; } = ColorSpace.RGB;
-        public uint BitsPerChannel { get; set; } = 8;
-        public PixelFormat PixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
+        [MemoryPackIgnore]
+        public Stream? DataStream { get; set; }
         [MemoryPackIgnore]
         public int NumChannels { get; set; } = 3;
         [MemoryPackIgnore]
         public int BitsPerPixel { get; set; } = 24;
         [MemoryPackIgnore]
         public int BytesPerPixel { get; set; } = 3;
-        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.None;
-        public Compression Compression { get; set; } = Compression.Brotli;
         [MemoryPackIgnore]
         public int CompressionLevel { get; set; } = 3;
         [MemoryPackIgnore]
         public int BrotliWindowSize { get; set; } = 0;
-        public LayerBlendMode BlendMode { get; set; } = LayerBlendMode.Normal;
-        public double Opacity { get; set; } = 1.0;
         [MemoryPackIgnore]
         public bool Enabled { get; set; } = true;
+        [MemoryPackIgnore]
+        public (uint w, uint h)[,] TileDimensions { get; set; }
+        [MemoryPackIgnore]
+        public ulong[,] TileDataOffsets { get; set; }
+
+        public string Name { get; set; } = "layer";
+        public string Description { get; set; } = string.Empty;
+        public ColorSpace ColorSpace { get; set; } = ColorSpace.RGB;
+        public uint BitsPerChannel { get; set; } = 8;
+        public PixelFormat PixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
+        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.None;
+        public Compression Compression { get; set; } = Compression.Brotli;
+        public LayerBlendMode BlendMode { get; set; } = LayerBlendMode.Normal;
+        public double Opacity { get; set; } = 1.0;
         public uint OffsetX { get; set; } = 0;
         public uint OffsetY { get; set; } = 0;
         public uint Width { get; set; } = 0;
@@ -95,10 +102,6 @@ namespace BNGCORE {
         public List<DataBlock>? ExtraData { get; set; }
         public ulong[,] TileDataLengths { get; set; }
         public (uint w, uint h) BaseTileDimension { get; set; }
-        [MemoryPackIgnore]
-        public (uint w, uint h)[,] TileDimensions { get; set; }
-        [MemoryPackIgnore]
-        public ulong[,] TileDataOffsets { get; set; }
     }
 
     [MemoryPackable]
@@ -141,6 +144,7 @@ namespace BNGCORE {
 
 
     public partial class ImportParameters {
+        public Stream? DataStream { get; set; }
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
@@ -476,20 +480,24 @@ namespace BNGCORE {
 
         #region Helpers
         private int CalculateBitsPerPixel(ColorSpace pixelFormat, uint bitsPerChannel) {
+            return GetNumChannels(pixelFormat) * (int)bitsPerChannel;
+        }
+
+        private int GetNumChannels(ColorSpace pixelFormat) {
             switch (pixelFormat) {
                 case ColorSpace.GRAY:
-                    return (int)bitsPerChannel;
+                    return 1;
                 case ColorSpace.GRAYA:
-                    return (int)bitsPerChannel * 2;
+                    return 2;
                 case ColorSpace.RGB:
                 case ColorSpace.YCrCb:
-                    return (int)bitsPerChannel * 3;
+                    return 3;
                 case ColorSpace.RGBA:
                 case ColorSpace.CMYK:
-                    return (int)bitsPerChannel * 4;
+                    return 4;
                 case ColorSpace.CMYKA:
-                    return (int)bitsPerChannel * 5;
-                default: return (int)bitsPerChannel;
+                    return 5;
+                default: return 1;
             }
         }
 
@@ -506,23 +514,23 @@ namespace BNGCORE {
         #endregion
 
         #region Writing
-        public Bitmap(string ImportFileName, ImportParameters Options) {
+        public Bitmap(string ImportFileName, ImportParameters Options, ref Stream? dataStream) {
             Frame = new FrameHeader();
-            AddLayer(ImportFileName, Options);
+            AddLayer(ImportFileName, Options, ref dataStream);
         }
 
-        public void AddLayer(string ImportFileName, ImportParameters Options) {
+        public void AddLayer(string ImportFileName, ImportParameters Options, ref Stream? dataStream) {
             Frame.Layers ??= new();
-            PrepareRAWFileToLayer(ImportFileName, (RAWImportParameters)Options);
+            PrepareRAWDataToLayer(ImportFileName, (RAWImportParameters)Options, ref dataStream);
         }
-        public void WriteBNGFrame(ref Stream OutputStream) {
+        public void WriteBNGFrame(ref Stream outputStream) {
             if (Frame == null) throw new NullReferenceException(nameof(Frame));
-            if (OutputStream == null) throw new ArgumentNullException(nameof(File));
-            if (OutputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
-            if (OutputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
+            if (outputStream == null) throw new ArgumentNullException(nameof(File));
+            if (outputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
+            if (outputStream.CanWrite == false) throw new AccessViolationException("Stream not writable");
 
             //Write magic word
-            OutputStream.Write(Encoding.ASCII.GetBytes("BNG"));
+            outputStream.Write(Encoding.ASCII.GetBytes("BNG"));
 
             //Info byte
             Frame.Version = 0;
@@ -530,7 +538,7 @@ namespace BNGCORE {
             byte flags = (byte)Frame.Flags;
             byte infoByte = (byte)(version << 4 | flags);
 
-            OutputStream.WriteByte(infoByte);
+            outputStream.WriteByte(infoByte);
 
             //Check if stream optimized flag is set
             bool optimizeInMemory = false;
@@ -545,27 +553,31 @@ namespace BNGCORE {
                         memToBeUsed += (ulong)(Frame.Layers[layer].Width * Frame.Layers[layer].Height * (Frame.Layers[layer].BitsPerPixel / 8));
                     if (memToBeUsed + 0x12C00000 < maxMemoryToUse) {
                         optimizeInMemory = true;
-                    } else {
+                    }
+                    else {
                         TempFileName = $@"{Guid.NewGuid()}.bng-temp";
                     }
-                } else {
+                }
+                else {
                     TempFileName = $@"{Guid.NewGuid()}.bng-temp";
                 }
-            } else {
+            }
+            else {
                 //Write placeholder 64 bit word:
-                offsetLengths = (ulong)OutputStream.Position;
-                OutputStream.Write(BitConverter.GetBytes((ulong)0x0));
-                OutputStream.Write(BitConverter.GetBytes((uint)0));
+                offsetLengths = (ulong)outputStream.Position;
+                outputStream.Write(BitConverter.GetBytes((ulong)0x0));
+                outputStream.Write(BitConverter.GetBytes((uint)0));
             }
 
             if (Frame.Layers == null) throw new NullReferenceException(string.Format(nameof(Frame.Layers)));
             Frame.LayerDataLengths = new ulong[Frame.Layers.Count];
 
-            Stream oStream = OutputStream; //No optimization, just write through
+            Stream oStream = outputStream; //No optimization, just write through
             //Determine wether to use memory stream or the file stream provided.
             if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && optimizeInMemory) {
                 oStream = new MemoryStream();
-            } else if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
+            }
+            else if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory) {
                 oStream = new FileStream(TempFileName, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 0x800000, FileOptions.RandomAccess);
             }
 
@@ -579,7 +591,14 @@ namespace BNGCORE {
 
                 Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
 
-                Stream InputStream = new FileStream(Frame.Layers[LayerID].SourceFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000, FileOptions.RandomAccess);
+                Stream inputStream;
+
+                if (Frame.Layers[LayerID].SourceFileName != "")
+                    inputStream = new FileStream(Frame.Layers[LayerID].SourceFileName, FileMode.OpenOrCreate, FileAccess.Read, FileShare.Read, 0x800000);
+                else if (Frame.Layers[LayerID].DataStream != null)
+                    inputStream = Frame.Layers[LayerID].DataStream;
+                else
+                    throw new ArgumentException("No input data specified. Please provide either Layer.SourceFileName or Layer.DataStream.");
 
                 Stopwatch sw = new();
                 sw.Start();
@@ -595,8 +614,8 @@ namespace BNGCORE {
 
                         for (int line = 0; line < corrTileSize.h; line++) {
                             inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
-                            InputStream.Seek(inputOffset, SeekOrigin.Begin);
-                            InputStream.Read(lineBuff);
+                            inputStream.Seek(inputOffset, SeekOrigin.Begin);
+                            inputStream.Read(lineBuff);
                             Filter(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
                             Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                         }
@@ -606,7 +625,7 @@ namespace BNGCORE {
                         Frame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
 
                         bytesWritten += lineBuff.LongLength * corrTileSize.h;
-                        var progress = (double)bytesWritten / InputStream.Length * 100.0;
+                        var progress = (double)bytesWritten / inputStream.Length * 100.0;
                         if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
                             sw.Restart();
                             ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
@@ -617,7 +636,7 @@ namespace BNGCORE {
                     }
                 }
             }
-            
+
             //Serialize the metadata and then compress it using Brotli
             byte[] headerData;
             if (Frame.Flags.HasFlag(Flags.COMPRESSED_HEADER)) {
@@ -631,31 +650,32 @@ namespace BNGCORE {
             }
             Frame.HeaderLength = (ulong)headerData.LongLength;
 
-            ulong dataEndPosition = (ulong)OutputStream.Position;
+            ulong dataEndPosition = (ulong)outputStream.Position;
             if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
                 dataEndPosition = (ulong)oStream.Length + Frame.HeaderLength;
-                OutputStream.Write(BitConverter.GetBytes((uint)Frame.HeaderLength));
-                OutputStream.Write(headerData);
+                outputStream.Write(BitConverter.GetBytes((uint)Frame.HeaderLength));
+                outputStream.Write(headerData);
                 oStream.Flush();
                 oStream.Seek(0, SeekOrigin.Begin);
                 for (int i = 0; i < oStream.Length; i += 0x800000) {
                     byte[] block = new byte[oStream.Length - oStream.Position > 0x800000 ? 0x800000 : oStream.Length - oStream.Position];
                     oStream.Read(block);
-                    OutputStream.Write(block);
+                    outputStream.Write(block);
                 }
                 oStream.Close();
                 oStream.Dispose();
                 if (Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED) && !optimizeInMemory)
-                    File.Delete(TempFileName);                    
-            } else {
-                OutputStream.Write(headerData);
-                OutputStream.Position = (long)offsetLengths;
-                OutputStream.Write(BitConverter.GetBytes(dataEndPosition));
-                OutputStream.Write(BitConverter.GetBytes((uint)headerData.Length));
-                OutputStream.Position = (long)dataEndPosition + (long)Frame.HeaderLength;
+                    File.Delete(TempFileName);
+            }
+            else {
+                outputStream.Write(headerData);
+                outputStream.Position = (long)offsetLengths;
+                outputStream.Write(BitConverter.GetBytes(dataEndPosition));
+                outputStream.Write(BitConverter.GetBytes((uint)headerData.Length));
+                outputStream.Position = (long)dataEndPosition + (long)Frame.HeaderLength;
             }
 
-            OutputStream.Flush();
+            outputStream.Flush();
 
             Array.Clear(headerData);
         }
@@ -722,11 +742,6 @@ namespace BNGCORE {
             }
         }
 
-        public ulong PrepareTIFFToLayer(string tiffFileName, int FrameID, ImportParameters importParameters) {
-            
-            return 0;
-        }
-
         /// <summary>
         /// Prepares the headers for a new layer from a raw image file
         /// </summary>
@@ -736,7 +751,7 @@ namespace BNGCORE {
         /// <returns>The new Layer ID</returns>
         /// <exception cref="NullReferenceException"></exception>
         /// <exception cref="NotImplementedException"></exception>
-        public ulong PrepareRAWFileToLayer(string RAWFileName, RAWImportParameters ImportParameters) {
+        public ulong PrepareRAWDataToLayer(string RAWFileName, RAWImportParameters ImportParameters, ref Stream? dataStream) {
             Frame.Width = ImportParameters.FrameWidth;
             Frame.Height = ImportParameters.FrameHeight;
             Frame.Flags = ImportParameters.Flags;
@@ -773,7 +788,14 @@ namespace BNGCORE {
 
             var newLayer = new Layer();
 
-            newLayer.SourceFileName = RAWFileName;
+            if (dataStream != null) {
+                newLayer.DataStream = dataStream;
+            }
+            else if (RAWFileName != "") {
+                newLayer.SourceFileName = RAWFileName;
+            } else {
+                throw new ArgumentException("No input data specified. Please provide either RAWFileName or dataStream.");
+            }
 
             if (ImportParameters.LayerName == "") {
                 newLayer.Name = Path.GetFileNameWithoutExtension(RAWFileName);
@@ -807,7 +829,7 @@ namespace BNGCORE {
             var numTilesX = (uint)Math.Floor(newLayer.Width / (double)tileSize.w);
             var numTilesY = (uint)Math.Floor(newLayer.Height / (double)tileSize.h);
 
-            newLayer.TileDataOffsets = new ulong[numTilesX + 1 , numTilesY + 1];
+            newLayer.TileDataOffsets = new ulong[numTilesX + 1, numTilesY + 1];
             newLayer.BaseTileDimension = tileSize;
 
             Frame.Layers.Add(newLayer);

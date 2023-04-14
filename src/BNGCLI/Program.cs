@@ -92,8 +92,8 @@ namespace BNG_CLI {
                 Help.WriteLine("\n  Layer\n");
                 Help.WriteLine("    lnm=   (Default=Filename w/o ext) Layer name                    Free text");
                 Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
-                Help.WriteLine("    lox=   (Required)                 Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
-                Help.WriteLine("    loy=   (Required)                 Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    lox=   (Default=0)                Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
+                Help.WriteLine("    loy=   (Default=0)                Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    lsx=   (Default=1)                Layer scale X                 Decimal number");
                 Help.WriteLine("    lsy=   (Default=1)                Layer scale Y                 Decimal number");
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
@@ -573,6 +573,7 @@ namespace BNG_CLI {
                     }
 
                     long frame = 0;
+                    Stream nullStream = null;
 
                     foreach (FileSource f in p.InputFiles) {
                         Stopwatch fsw = new();
@@ -584,11 +585,11 @@ namespace BNG_CLI {
                             frame++;
                             Console.WriteLine(string.Format("New Frame {0}:", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters);
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters);
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
                             Console.WriteLine("Writing file:");
@@ -602,7 +603,7 @@ namespace BNG_CLI {
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
                             Console.WriteLine(string.Format("Writing Frame {0}:", frame));
-                            BNG.AddLayer(f.pathName, f.importParameters);
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                             Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
