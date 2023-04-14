@@ -656,7 +656,7 @@ namespace BNG_CLI {
                                 }
 
                                 BNGToDecode.ProgressChangedEvent += pChangedDec;
-                                BNGToDecode.DecodeLayerToRaw(ref inFile, ref outFileDec, layer);
+                                BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
                                 outFileDec.Flush();
                                 outFileDec.Dispose();
