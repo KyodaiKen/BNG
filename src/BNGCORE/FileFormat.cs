@@ -194,7 +194,7 @@ namespace BNGCORE {
         }
 
         #region Loading
-        public void LoadBNG(ref Stream InputStream, out StringBuilder log, out FrameHeader header) {
+        public bool LoadBNG(ref Stream InputStream, out StringBuilder log, out FrameHeader header) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
@@ -213,7 +213,8 @@ namespace BNGCORE {
             Frame.Flags = (Flags)(infoByte & 0x0F);
 
             if (BitConverter.ToUInt32(ident) != BitConverter.ToUInt32(identCompare)) {
-                if(Strict) throw new InvalidDataException("This is not a BNG file!");
+                header = null;
+                return false;
             }
 
             //Check if the next 64 bit word which is the pointer to the header is not outside the bounds of the stream
@@ -362,6 +363,7 @@ namespace BNGCORE {
             }
 
             header = Frame;
+            return true;
         }
 
         public void DecodeLayerToRaw(ref Stream InputStream, ref Stream OutputStream, int LayerID) {
@@ -599,6 +601,9 @@ namespace BNGCORE {
                     inputStream = Frame.Layers[LayerID].DataStream;
                 else
                     throw new ArgumentException("No input data specified. Please provide either Layer.SourceFileName or Layer.DataStream.");
+
+                if (inputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
+                if (inputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
 
                 Stopwatch sw = new();
                 sw.Start();
