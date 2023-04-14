@@ -387,7 +387,7 @@ namespace BNGCORE {
             sw.Start();
             for (uint Y = 0; Y < tyl; Y++) {
                 for (uint X = 0; X < txl; X++) {
-                    UnpackTileToStream(layer, (X, Y), InputStream, OutputStream, bytesPerPixel, bytesWritten);
+                    UnpackTileToStream(layer, (X, Y), InputStream, OutputStream, bytesPerPixel, ref bytesWritten);
                     var progress = (double)bytesWritten / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
                     if (sw.ElapsedMilliseconds >= 250 || progress == 100.0 || (Y == 0 && X == 0)) {
                         sw.Restart();
@@ -404,7 +404,7 @@ namespace BNGCORE {
             }
         }
 
-        private void UnpackTileToStream(Layer layer, (uint x, uint y) tileIndex, Stream inStream, Stream outStream, int bytesPerPixel, long bytesWritten) {
+        private void UnpackTileToStream(Layer layer, (uint x, uint y) tileIndex, Stream inStream, Stream outStream, int bytesPerPixel, ref long bytesWritten) {
             //Read and decompress tile
             byte[] compressedTileBuffer = new byte[layer.TileDataLengths[tileIndex.x, tileIndex.y]];
             byte[] tileBuffer = new byte[layer.TileDimensions[tileIndex.x, tileIndex.y].w * layer.TileDimensions[tileIndex.x, tileIndex.y].h * bytesPerPixel];
