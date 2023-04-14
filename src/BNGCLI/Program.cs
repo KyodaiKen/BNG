@@ -585,15 +585,15 @@ namespace BNG_CLI {
                             frame++;
                             Console.WriteLine(string.Format("New Frame {0}:", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
                             Console.WriteLine("Writing file:");
-                            BNG.WriteBNGFrame(ref outFile);
+                            BNG.WriteBNGFrame(outFile);
                             BNG.Dispose();
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
@@ -603,9 +603,9 @@ namespace BNG_CLI {
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
                             Console.WriteLine(string.Format("Writing Frame {0}:", frame));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
                             Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
-                            BNG.WriteBNGFrame(ref outFile);
+                            BNG.WriteBNGFrame(outFile);
                             BNG.Dispose();
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
@@ -632,7 +632,7 @@ namespace BNG_CLI {
                         while(inFile.Position < inFile.Length) {
                             cf++;
                             FrameHeader bng;
-                            if (!BNGToDecode.LoadBNG(ref inFile, out info, out bng)) {
+                            if (!BNGToDecode.LoadBNG(inFile, out info, out bng)) {
                                 Console.WriteLine(fi > 1 ? "No further BNG frame was found. Finalizing..." : "Error: No BNG frame was found. Aborting...");
                                 break;
                             }
@@ -656,7 +656,7 @@ namespace BNG_CLI {
                                 }
 
                                 BNGToDecode.ProgressChangedEvent += pChangedDec;
-                                BNGToDecode.DecodeLayerToRaw(ref inFile, ref outFileDec, layer);
+                                BNGToDecode.DecodeLayerToRaw(inFile, outFileDec, layer);
 
                                 outFileDec.Flush();
                                 outFileDec.Dispose();

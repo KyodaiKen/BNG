@@ -26,7 +26,7 @@ namespace BNGCORE.Compressors {
             _iBitCounter = 0;
         }
 
-        public bool Compress(ref MemoryStream reader, ref MemoryStream writer) {
+        public bool Compress(MemoryStream reader, MemoryStream writer) {
 
             try {
                 Initialize();
@@ -114,7 +114,7 @@ namespace BNGCORE.Compressors {
             }
         }
 
-        public bool Decompress(ref MemoryStream reader, ref MemoryStream writer) {
+        public bool Decompress(MemoryStream reader, MemoryStream writer) {
 
             try {
                 Initialize();

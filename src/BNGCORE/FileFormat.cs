@@ -194,7 +194,7 @@ namespace BNGCORE {
         }
 
         #region Loading
-        public bool LoadBNG(ref Stream InputStream, out StringBuilder log, out FrameHeader header) {
+        public bool LoadBNG(Stream InputStream, out StringBuilder log, out FrameHeader header) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
@@ -366,7 +366,7 @@ namespace BNGCORE {
             return true;
         }
 
-        public void DecodeLayerToRaw(ref Stream InputStream, ref Stream OutputStream, int LayerID) {
+        public void DecodeLayerToRaw(Stream InputStream, Stream OutputStream, int LayerID) {
             if (InputStream == null) throw new ArgumentNullException(nameof(File));
             if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
             if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
@@ -387,7 +387,7 @@ namespace BNGCORE {
             sw.Start();
             for (uint Y = 0; Y < tyl; Y++) {
                 for (uint X = 0; X < txl; X++) {
-                    UnpackTileToStream(ref layer, (X, Y), ref InputStream, ref OutputStream, bytesPerPixel, ref bytesWritten);
+                    UnpackTileToStream(layer, (X, Y), InputStream, OutputStream, bytesPerPixel, bytesWritten);
                     var progress = (double)bytesWritten / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
                     if (sw.ElapsedMilliseconds >= 250 || progress == 100.0 || (Y == 0 && X == 0)) {
                         sw.Restart();
@@ -404,12 +404,12 @@ namespace BNGCORE {
             }
         }
 
-        private void UnpackTileToStream(ref Layer layer, (uint x, uint y) tileIndex, ref Stream inStream, ref Stream outStream, int bytesPerPixel, ref long bytesWritten) {
+        private void UnpackTileToStream(Layer layer, (uint x, uint y) tileIndex, Stream inStream, Stream outStream, int bytesPerPixel, long bytesWritten) {
             //Read and decompress tile
             byte[] compressedTileBuffer = new byte[layer.TileDataLengths[tileIndex.x, tileIndex.y]];
             byte[] tileBuffer = new byte[layer.TileDimensions[tileIndex.x, tileIndex.y].w * layer.TileDimensions[tileIndex.x, tileIndex.y].h * bytesPerPixel];
             inStream.Read(compressedTileBuffer);
-            DeCompress(layer.Compression, tileBuffer.Length, ref compressedTileBuffer, ref tileBuffer);
+            DeCompress(layer.Compression, tileBuffer.Length, compressedTileBuffer, tileBuffer);
 
             var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
             var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
@@ -419,34 +419,34 @@ namespace BNGCORE {
 
             for (uint r = 0; r < tileRows; r++) {
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
-                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, ref row, ref prevRow);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, row, prevRow);
                 outStream.Seek(layer.BaseTileDimension.h * tileIndex.y * stride + r * stride + layer.BaseTileDimension.w * tileIndex.x * bytesPerPixel, SeekOrigin.Begin);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
             }
         }
 
-        private byte[] DecodeFilter4TileScanline(CompressionPreFilter compressionPreFilter, int rowLength, int bytesPerPixel, ref byte[] lineBuff, ref byte[] prevLineBuff) {
+        private byte[] DecodeFilter4TileScanline(CompressionPreFilter compressionPreFilter, int rowLength, int bytesPerPixel, byte[] lineBuff, byte[] prevLineBuff) {
             byte[] unfilteredLine = new byte[rowLength];
             switch (compressionPreFilter) {
                 case CompressionPreFilter.Paeth:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Paeth.UnFilter(ref lineBuff,ref unfilteredLine, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Paeth.UnFilter(lineBuff,unfilteredLine, prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Sub:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Sub.UnFilter(ref lineBuff, ref unfilteredLine, col, bytesPerPixel);
+                        unfilteredLine[col] = Sub.UnFilter(lineBuff, unfilteredLine, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Up:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Up.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Up.UnFilter(lineBuff, prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Average:
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        unfilteredLine[col] = Average.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Average.UnFilter(lineBuff, prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 default:
@@ -456,7 +456,7 @@ namespace BNGCORE {
             return unfilteredLine;
         }
 
-        private void DeCompress(Compression compression, int uncompressedSize, ref byte[] compressedBuffer, ref byte[] decompressedBuffer) {
+        private void DeCompress(Compression compression, int uncompressedSize, byte[] compressedBuffer, byte[] decompressedBuffer) {
 
             switch (compression) {
                 case Compression.Brotli:
@@ -472,7 +472,7 @@ namespace BNGCORE {
                     MemoryStream lzwComprBuffer = new(compressedBuffer);
                     MemoryStream lzwDecomprBuffer = new();
                     LZW lzwCoder = new();
-                    lzwCoder.Decompress(ref lzwComprBuffer, ref lzwDecomprBuffer);
+                    lzwCoder.Decompress(lzwComprBuffer, lzwDecomprBuffer);
                     decompressedBuffer = lzwDecomprBuffer.ToArray();
                     break;
                 case Compression.None:
@@ -520,14 +520,14 @@ namespace BNGCORE {
         #region Writing
         public Bitmap(string ImportFileName, ImportParameters Options, ref Stream? dataStream) {
             Frame = new FrameHeader();
-            AddLayer(ImportFileName, Options, ref dataStream);
+            AddLayer(ImportFileName, Options, dataStream);
         }
 
-        public void AddLayer(string ImportFileName, ImportParameters Options, ref Stream? dataStream) {
+        public void AddLayer(string ImportFileName, ImportParameters Options, Stream? dataStream) {
             Frame.Layers ??= new();
-            PrepareRAWDataToLayer(ImportFileName, (RAWImportParameters)Options, ref dataStream);
+            PrepareRAWDataToLayer(ImportFileName, (RAWImportParameters)Options, dataStream);
         }
-        public void WriteBNGFrame(ref Stream outputStream) {
+        public void WriteBNGFrame(Stream outputStream) {
             if (Frame == null) throw new NullReferenceException(nameof(Frame));
             if (outputStream == null) throw new ArgumentNullException(nameof(File));
             if (outputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
@@ -623,11 +623,11 @@ namespace BNGCORE {
                             inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                             inputStream.Seek(inputOffset, SeekOrigin.Begin);
                             inputStream.Read(lineBuff);
-                            Filter(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
+                            Filter(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, lineBuff, prevLineBuff, iBuff, BytesPerPixel);
                             Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                         }
 
-                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
+                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, iBuff, cBuff);
                         Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
                         Frame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
 
@@ -687,33 +687,33 @@ namespace BNGCORE {
             Array.Clear(headerData);
         }
 
-        void Filter(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, ref byte[] lineBuff, ref byte[] prevLineBuff, ref MemoryStream iBuff, int BytesPerPixel) {
+        void Filter(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, byte[] lineBuff, byte[] prevLineBuff, MemoryStream iBuff, int BytesPerPixel) {
             switch (compressionPreFilter) {
                 case CompressionPreFilter.Paeth:
                     byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        paethLineBuff[col] = Paeth.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        paethLineBuff[col] = Paeth.Filter(lineBuff, prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(paethLineBuff);
                     break;
                 case CompressionPreFilter.Sub:
                     byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        subLineBuff[col] = Sub.Filter(ref lineBuff, col, BytesPerPixel);
+                        subLineBuff[col] = Sub.Filter(lineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(subLineBuff);
                     break;
                 case CompressionPreFilter.Up:
                     byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        upLineBuff[col] = Up.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        upLineBuff[col] = Up.Filter(lineBuff, prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(upLineBuff);
                     break;
                 case CompressionPreFilter.Average:
                     byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++) {
-                        avgLineBuff[col] = Average.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
+                        avgLineBuff[col] = Average.Filter(lineBuff, prevLineBuff, col, BytesPerPixel);
                     }
                     iBuff.Write(avgLineBuff);
                     break;
@@ -723,7 +723,7 @@ namespace BNGCORE {
             }
         }
 
-        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, ref MemoryStream iBuff, ref byte[] cBuff) {
+        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, MemoryStream iBuff, byte[] cBuff) {
             switch (compression) {
                 case Compression.Brotli:
                     cBuff = new byte[iBuff.Length];
@@ -740,7 +740,7 @@ namespace BNGCORE {
                 case Compression.LZW:
                     MemoryStream lzwComprBuffer = new();
                     LZW lzwCoder = new();
-                    lzwCoder.Compress(ref iBuff, ref lzwComprBuffer);
+                    lzwCoder.Compress(iBuff, lzwComprBuffer);
                     cBuff = lzwComprBuffer.ToArray();
                     break;
                 case Compression.None:
@@ -758,7 +758,7 @@ namespace BNGCORE {
         /// <returns>The new Layer ID</returns>
         /// <exception cref="NullReferenceException"></exception>
         /// <exception cref="NotImplementedException"></exception>
-        public ulong PrepareRAWDataToLayer(string RAWFileName, RAWImportParameters ImportParameters, ref Stream? dataStream) {
+        public ulong PrepareRAWDataToLayer(string RAWFileName, RAWImportParameters ImportParameters, Stream? dataStream) {
             Frame.Width = ImportParameters.FrameWidth;
             Frame.Height = ImportParameters.FrameHeight;
             Frame.Flags = ImportParameters.Flags;
