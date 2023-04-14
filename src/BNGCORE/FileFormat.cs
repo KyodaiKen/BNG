@@ -379,22 +379,24 @@ namespace BNGCORE {
             var tyl = layer.TileDataOffsets.GetLongLength(1);
             var bytesPerPixel = CalculateBitsPerPixel(layer.ColorSpace, layer.BitsPerChannel) / 8;
 
+            long bytesWritten = 0;
 
-            OutputStream.SetLength(0);
-            long bytesWrittenForProgress = 0;
+            OutputStream.Seek(0, SeekOrigin.Begin);
 
             Stopwatch sw = new();
             sw.Start();
             for (uint Y = 0; Y < tyl; Y++) {
                 for (uint X = 0; X < txl; X++) {
-                    UnpackTileToStream(ref layer, (X, Y), ref InputStream, ref OutputStream, bytesPerPixel, ref bytesWrittenForProgress);
-                    var progress = (double)bytesWrittenForProgress / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
-                    if (sw.ElapsedMilliseconds >= 250 || progress == 100.0) {
+                    UnpackTileToStream(ref layer, (X, Y), ref InputStream, ref OutputStream, bytesPerPixel, ref bytesWritten);
+                    var progress = (double)bytesWritten / (layer.Width * layer.Height * bytesPerPixel) * 100.0;
+                    if (sw.ElapsedMilliseconds >= 250 || progress == 100.0 || (Y == 0 && X == 0)) {
                         sw.Restart();
                         ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
                     }
                 }
             }
+
+            OutputStream.SetLength(bytesWritten);
 
             //Point to end of the header data so the next frame can be read (if there are any)
             if (!Frame.Flags.HasFlag(Flags.STREAMING_OPTIMIZED)) {
