@@ -536,7 +536,7 @@ namespace BNGCORE
             for (uint r = 0; r < tileRows; r++)
             {
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
-                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, row, prevRow);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, in row, ref prevRow);
                 outStream.Seek(layer.BaseTileDimension.h * tileIndex.y * stride + r * stride + layer.BaseTileDimension.w * tileIndex.x * bytesPerPixel, SeekOrigin.Begin);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
@@ -561,7 +561,7 @@ namespace BNGCORE
             for (uint r = 0; r < tileRows; r++)
             {
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
-                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, row, prevRow);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, in row, ref prevRow);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
             }
@@ -569,7 +569,7 @@ namespace BNGCORE
             return bytesWritten;
         }
 
-        private byte[] DecodeFilter4TileScanline(CompressionPreFilter compressionPreFilter, int rowLength, int bytesPerPixel, byte[] lineBuff, byte[] prevLineBuff)
+        private byte[] DecodeFilter4TileScanline(CompressionPreFilter compressionPreFilter, int rowLength, int bytesPerPixel, in byte[] lineBuff, ref byte[] prevLineBuff)
         {
             byte[] unfilteredLine = new byte[rowLength];
             switch (compressionPreFilter)
@@ -826,6 +826,33 @@ namespace BNGCORE
                     int tileNum = (int)(numTilesY * numTilesX);
                     byte[][] tileOutputBuffer = new byte[tileNum][];
                     long[] bytesRead = new long[tileNum];
+
+                    var FlushTiles = () => {
+                        for (int ri = 0; ri < tileNum; ri++)
+                        {
+                            if (tileOutputBuffer[ri] != null)
+                            {
+                                if(tileOutputBuffer[ri].LongLength > 0)
+                                {
+                                    int x = ri % (int)numTilesX;
+                                    int y = ri / (int)numTilesX;
+                                    oStream.Write(tileOutputBuffer[ri]);
+                                    Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)tileOutputBuffer[ri].Length;
+                                    Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ri].Length;
+                                    tileOutputBuffer[ri] = new byte[0];
+                                }
+                                else
+                                {
+                                    break; 
+                                }
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                    };
+
                     var plResult = Parallel.For(0, tileNum, (int i) => {
                         int x = i % (int)numTilesX;
                         int y = i / (int)numTilesX;
@@ -845,51 +872,30 @@ namespace BNGCORE
                             {
                                 long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                                 inputStream.Seek(inputOffset, SeekOrigin.Begin);
-                                inputStream.Read(lineBuff);
+                                bytesRead[i] += inputStream.Read(lineBuff);
 
                                 byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
                                 FilterTileScanline(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
 
                                 tileBuffer.Write(filteredScanline);
-                                bytesRead[i] += filteredScanline.Length;
                                 Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                             }
+
+                            long readSoFar = 0;
+                            for (int ri = 0; ri < tileNum; ri++)
+                                readSoFar += bytesRead[i];
+
+                            var progress = (double)readSoFar / inputStream.Length * 100.0;
+                            ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
                         }
 
                         //Compress tile data
                         Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
 
-                        long readSoFar = 0;
-                        for (int ri = 0; ri < tileNum; ri++)
-                            readSoFar += bytesRead[i];
-
-                        var progress = (double)readSoFar / inputStream.Length * 100.0;
-                        ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
-
                         //Add tile into the buffer
                         tileOutputBuffer[i] = cBuff;
                     });
 
-                    //While waiting for everything to be finished, flush out the ones that are finished in order
-
-                    var FlushTiles = () => {
-                        for (int ri = 0; ri < tileNum; ri++)
-                        {
-                            if(tileOutputBuffer[ri].LongLength > 0)
-                            {
-                                oStream.Write(tileOutputBuffer[ri]);
-                                tileOutputBuffer[ri] = new byte[0];
-                            }
-                        }
-                    };
-
-                    while (!plResult.IsCompleted)
-                    {
-                        FlushTiles();
-                        Thread.Sleep(1);
-                    }
-
-                    //Flush remaining tiles
                     FlushTiles();
                 }
             }
