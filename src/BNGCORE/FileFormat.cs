@@ -484,7 +484,8 @@ namespace BNGCORE
                             ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
                     });
 
-                    while (!plResult.IsCompleted);
+                    while (!plResult.IsCompleted)
+                        Thread.Sleep(1);
 
                     //Writing to output
                     var stride = layer.Width * bytesPerPixel;
