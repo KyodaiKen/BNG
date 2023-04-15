@@ -480,8 +480,7 @@ namespace BNGCORE
 
                         //Progress update
                         var progress = sumSoFar / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
-                        if (X % 2 == 1 || progress == 100.0 || (Y == 0 && X == 0))
-                            ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
+                        ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
                     });
 
                     while (!plResult.IsCompleted)

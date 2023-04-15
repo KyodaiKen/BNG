@@ -628,6 +628,8 @@ namespace BNG_CLI {
                         BNGToDecode.VerboseLevel = 1;
                         Stream inFile = new FileStream(file.pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000);
 
+                        TimeSpan last = new(DateTime.Now.Ticks);
+
                         long cf = 0;
                         while(inFile.Position < inFile.Length) {
                             cf++;
@@ -650,7 +652,8 @@ namespace BNG_CLI {
                                 Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
                                 bool writingToConsole = false;
                                 void pChangedDec(double progress, (long item, long items) itemProgress) {
-                                    if (!writingToConsole)
+                                    TimeSpan now = new(DateTime.Now.Ticks);
+                                    if ((!writingToConsole && (now - last).TotalMilliseconds > 100) || progress == 0.0 || progress == 100.0)
                                     {
                                         writingToConsole = true;
                                         Console.CursorLeft = 0;
@@ -658,6 +661,7 @@ namespace BNG_CLI {
                                         Console.CursorLeft = 0;
                                         Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
                                         writingToConsole = false;
+                                        last = new(DateTime.Now.Ticks);
                                     }
                                 }
 
