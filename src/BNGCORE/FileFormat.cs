@@ -473,15 +473,15 @@ namespace BNGCORE
                     var plResult = Parallel.For(0, (int)txl, (int X) => {
                         bytesWrittenMT[X] += UnpackTileToStreamMT(layer, ((uint)X, Y), yTiles[X], ref outTiles[X], bytesPerPixel);
 
+                        //Calculate sum of bytes written
                         long sumSoFar = 0;
                         for (uint ssfX = 0; ssfX < txl; ssfX++)
                             sumSoFar += bytesWrittenMT[ssfX];
-                        
+
+                        //Progress update
                         var progress = sumSoFar / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
                         if (X % 2 == 1 || progress == 100.0 || (Y == 0 && X == 0))
-                        {
                             ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
-                        }
                     });
 
                     while (!plResult.IsCompleted);
