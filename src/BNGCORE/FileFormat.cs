@@ -3,7 +3,9 @@ using BNGCORE.Filters;
 using MemoryPack;
 using MemoryPack.Compression;
 using System.Diagnostics;
+using System.IO;
 using System.IO.Compression;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 using System.Text;
 using System.Threading.Channels;
@@ -303,6 +305,7 @@ namespace BNGCORE
             Frame.Version = (byte)(infoByte >> 4);
             Frame.Flags = (Flags)(infoByte & 0x0F);
 
+
             if (VerboseLevel > 0)
             {
                 log.AppendLine("\n" + string.Format("BNG Frame Version....: {0}", Frame.Version));
@@ -320,6 +323,7 @@ namespace BNGCORE
                 log.AppendLine(string.Format("'-Channel data format: {0}", Frame.CompositingPixelFormat.ToString()));
             }
 
+            ulong layerDataOffset = 0;
             Frame.LayerDataOffsets = new ulong[Frame.Layers.Count];
 
             for (int layer = 0; layer < Frame.Layers.Count; layer++)
@@ -351,7 +355,9 @@ namespace BNGCORE
                     log.AppendLine(string.Format("Uncompressed size (\"): {0}", Frame.Layers[layer].Width * Frame.Layers[layer].Height * CalculateBitsPerPixel(Frame.Layers[layer].ColorSpace, Frame.Layers[layer].BitsPerChannel) / 8));
                     log.AppendLine(string.Format("Number of tiles......: {0}", Frame.Layers[layer].TileDataLengths.LongLength));
                 }
-                Frame.LayerDataOffsets[layer] += Frame.LayerDataLengths[layer];
+
+                Frame.LayerDataOffsets[layer] = layerDataOffset;
+                layerDataOffset += Frame.LayerDataLengths[layer];
 
                 var txl = Frame.Layers[layer].TileDataLengths.GetLongLength(0);
                 var tyl = Frame.Layers[layer].TileDataLengths.GetLongLength(1);
@@ -360,11 +366,12 @@ namespace BNGCORE
 
                 StringBuilder tileInfo = new StringBuilder();
 
+                ulong tileDataOffset = 0;
+
                 for (uint tileY = 0; tileY < tyl; tileY++)
                 {
                     for (uint tileX = 0; tileX < txl; tileX++)
                     {
-                        Frame.Layers[layer].TileDataOffsets[tileX, tileY] += Frame.Layers[layer].TileDataLengths[tileX, tileY];
                         if (VerboseLevel > 1)
                         {
                             string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
@@ -372,6 +379,9 @@ namespace BNGCORE
                             log.AppendLine(new string('-', 40 - tleNum.Length));
                         }
                         ulong tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
+                        Frame.Layers[layer].TileDataOffsets[tileX, tileY] += tileDataOffset;
+                        tileDataOffset += tleSzPacked;
+
                         Frame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[layer].Width, Frame.Layers[layer].Height)
                             , (Frame.Layers[layer].BaseTileDimension.w, Frame.Layers[layer].BaseTileDimension.h), (tileX, tileY));
@@ -441,58 +451,45 @@ namespace BNGCORE
             }
             else
             {
-                //Multi threaded
-
-                var maxY = (int)tyl;
-
-                var test = new List<Channel<(int, int)>>(maxY);
-
-                for (int i = 0; i < test.Capacity; i++)
+                for (uint Y = 0; Y < tyl; Y++)
                 {
-                    test.Add(Channel.CreateUnbounded<(int, int)>());
-                }
+                    //Load all possible column tiles of this row into the buffer
+                    byte[][] yTiles = new byte[txl][];
+                    Stream[] outTiles = new Stream[txl];
+                    for (uint X = 0; X < txl; X++)
+                    {
+                        yTiles[X] = new byte[layer.TileDataLengths[X, Y]];
+                        InputStream.Seek((long)layer.TileDataOffsets[X, Y] + (long)Frame.LayerDataOffsets[layer.id] + (long)Frame.DataStartOffset, SeekOrigin.Begin);
+                        InputStream.Read(yTiles[X]);
+                        outTiles[X] = new MemoryStream();
+                    }
 
-                // For testing
-                _ = Task.Run(() => {
-
-                    Parallel.For(0, maxY, (int index) => {
-
-                        //1*1, 1*2, 1*3
-                        //2*1, 2*2, 2*3
-                        // Etc - ah we only output the rows, not the columns
-                        for (int X = 0; X < txl; X++)
+                    //Parallel processing
+                    var plResult = Parallel.For(0, (int)txl, (int X) => {
+                        bytesWritten += UnpackTileToStreamMT(layer, ((uint)X, Y), yTiles[X], ref outTiles[X], bytesPerPixel);
+                        var progress = bytesWritten / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
+                        if (X % 2 == 1 || progress == 100.0 || (Y == 0 && X == 0))
                         {
-                            var success = test[index].Writer.TryWrite((X, index));
-                            //i think this might been a typo
-                            bytesWritten = UnpackTileToStream(layer, ((uint)X, (uint)index), InputStream, OutputStream, bytesPerPixel);
-                            var progress = bytesWritten / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
-                            if (X % 2 == 1 || progress == 100.0 || (index == 0 && X == 0))
-                            {
-                                ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
-                            }
+                            ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
                         }
-                        test[index].Writer.Complete();
                     });
-                });
 
-                // no row 0 on the image
-                for (int i = 1; i < test.Count; i++)
-                {
-                    var channel = test[i];
+                    while (!plResult.IsCompleted);
 
-                    // This is witchraft plz, don't do this ;-;
-                    var asd = async () => {
-                        await foreach (var tile in channel.Reader.ReadAllAsync())
+                    //Writing to output
+                    var stride = layer.Width * bytesPerPixel;
+                    for (var X = 0; X < yTiles.LongLength; X++)
+                    {
+                        outTiles[X].Position = 0;
+                        for (var r = 0; r < layer.TileDimensions[X,Y].h; r++)
                         {
-                            //Console.Write($"X=> {tile.Item1} Y=> {tile.Item2} | ");
+                            OutputStream.Seek(layer.BaseTileDimension.h * Y * stride + r * stride + layer.BaseTileDimension.w * X * bytesPerPixel, SeekOrigin.Begin);
+                            var tileRow = new byte[layer.TileDimensions[X, Y].w * bytesPerPixel];
+                            outTiles[X].Read(tileRow);
+                            OutputStream.Write(tileRow);
                         }
-                        //Console.WriteLine();
-                    };
-
-                    asd.Invoke().GetAwaiter().GetResult();
+                    }
                 }
-
-
             }
 
             OutputStream.SetLength(bytesWritten);
@@ -515,7 +512,7 @@ namespace BNGCORE
 
             inStream.Seek((long)layer.TileDataOffsets[tileIndex.x, tileIndex.y] + (long)Frame.LayerDataOffsets[layer.id] + (long)Frame.DataStartOffset, SeekOrigin.Begin);
             inStream.Read(compressedTileBuffer);
-            DeCompress(layer.Compression, tileBuffer.Length, compressedTileBuffer, tileBuffer);
+            DeCompress(layer.Compression, compressedTileBuffer, ref tileBuffer);
 
             var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
             var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
@@ -529,6 +526,31 @@ namespace BNGCORE
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
                 prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, row, prevRow);
                 outStream.Seek(layer.BaseTileDimension.h * tileIndex.y * stride + r * stride + layer.BaseTileDimension.w * tileIndex.x * bytesPerPixel, SeekOrigin.Begin);
+                outStream.Write(prevRow);
+                bytesWritten += prevRow.LongLength;
+            }
+
+            return bytesWritten;
+        }
+
+        private long UnpackTileToStreamMT(Layer layer, (uint x, uint y) tileIndex, in byte[] dataIn, ref Stream outStream, int bytesPerPixel)
+        {
+            //Read and decompress tile
+            byte[] tileBuffer = new byte[layer.TileDimensions[tileIndex.x, tileIndex.y].w * layer.TileDimensions[tileIndex.x, tileIndex.y].h * bytesPerPixel];
+
+            DeCompress(layer.Compression, dataIn, ref tileBuffer);
+
+            var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
+            var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
+            byte[] prevRow = new byte[tileRowRawLength]; //This also doubles as the unfiltered row for writing to the stream!
+            byte[] row = new byte[tileRowRawLength];
+            var stride = layer.Width * bytesPerPixel;
+            long bytesWritten = 0;
+
+            for (uint r = 0; r < tileRows; r++)
+            {
+                Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, row, prevRow);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
             }
@@ -572,9 +594,8 @@ namespace BNGCORE
             return unfilteredLine;
         }
 
-        private void DeCompress(Compression compression, int uncompressedSize, byte[] compressedBuffer, byte[] decompressedBuffer)
+        private void DeCompress(Compression compression, in byte[] compressedBuffer, ref byte[] decompressedBuffer)
         {
-
             switch (compression)
             {
                 case Compression.Brotli:
@@ -590,7 +611,7 @@ namespace BNGCORE
                     MemoryStream lzwComprBuffer = new(compressedBuffer);
                     MemoryStream lzwDecomprBuffer = new();
                     LZW lzwCoder = new();
-                    lzwCoder.Decompress(ref lzwComprBuffer, ref lzwDecomprBuffer);
+                    lzwCoder.Decompress(lzwComprBuffer, lzwDecomprBuffer);
                     decompressedBuffer = lzwDecomprBuffer.ToArray();
                     break;
                 case Compression.None:
@@ -893,7 +914,7 @@ namespace BNGCORE
                 case Compression.LZW:
                     MemoryStream lzwComprBuffer = new();
                     LZW lzwCoder = new();
-                    lzwCoder.Compress(ref iBuff, ref lzwComprBuffer);
+                    lzwCoder.Compress(iBuff, lzwComprBuffer);
                     cBuff = lzwComprBuffer.ToArray();
                     break;
                 case Compression.None:
