@@ -555,7 +555,6 @@ namespace BNGCORE
             var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
             byte[] prevRow = new byte[tileRowRawLength]; //This also doubles as the unfiltered row for writing to the stream!
             byte[] row = new byte[tileRowRawLength];
-            var stride = layer.Width * bytesPerPixel;
             long bytesWritten = 0;
 
             for (uint r = 0; r < tileRows; r++)
