@@ -425,11 +425,11 @@ namespace BNGCORE
             var tyl = layer.TileDataOffsets.GetLongLength(1);
             var bytesPerPixel = CalculateBitsPerPixel(layer.ColorSpace, layer.BitsPerChannel) / 8;
 
-            long bytesWritten = 0;
+
 
             OutputStream.Seek(0, SeekOrigin.Begin);
 
-
+            long bytesWritten = 0;
 
             if (1 == 2)
             { //Single threaded
@@ -451,11 +451,16 @@ namespace BNGCORE
             }
             else
             {
+                long[] bytesWrittenMT = new long[txl];
+                for (uint X = 0; X < txl; X++)
+                    bytesWrittenMT[X] = 0;
+
                 for (uint Y = 0; Y < tyl; Y++)
                 {
                     //Load all possible column tiles of this row into the buffer
                     byte[][] yTiles = new byte[txl][];
                     Stream[] outTiles = new Stream[txl];
+                    
                     for (uint X = 0; X < txl; X++)
                     {
                         yTiles[X] = new byte[layer.TileDataLengths[X, Y]];
@@ -466,8 +471,13 @@ namespace BNGCORE
 
                     //Parallel processing
                     var plResult = Parallel.For(0, (int)txl, (int X) => {
-                        bytesWritten += UnpackTileToStreamMT(layer, ((uint)X, Y), yTiles[X], ref outTiles[X], bytesPerPixel);
-                        var progress = bytesWritten / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
+                        bytesWrittenMT[X] += UnpackTileToStreamMT(layer, ((uint)X, Y), yTiles[X], ref outTiles[X], bytesPerPixel);
+
+                        long sumSoFar = 0;
+                        for (uint ssfX = 0; ssfX < txl; ssfX++)
+                            sumSoFar += bytesWrittenMT[ssfX];
+                        
+                        var progress = sumSoFar / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
                         if (X % 2 == 1 || progress == 100.0 || (Y == 0 && X == 0))
                         {
                             ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
@@ -487,6 +497,7 @@ namespace BNGCORE
                             var tileRow = new byte[layer.TileDimensions[X, Y].w * bytesPerPixel];
                             outTiles[X].Read(tileRow);
                             OutputStream.Write(tileRow);
+                            bytesWritten += tileRow.LongLength;
                         }
                     }
                 }
