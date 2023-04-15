@@ -2,6 +2,7 @@
 using BNGCORE.Filters;
 using MemoryPack;
 using MemoryPack.Compression;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -576,25 +577,25 @@ namespace BNGCORE
                 case CompressionPreFilter.Paeth:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                     {
-                        unfilteredLine[col] = Paeth.UnFilter(ref lineBuff, ref unfilteredLine, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Paeth.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Sub:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                     {
-                        unfilteredLine[col] = Sub.UnFilter(ref lineBuff, ref unfilteredLine, col, bytesPerPixel);
+                        unfilteredLine[col] = Sub.UnFilter(in lineBuff, in unfilteredLine, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Up:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                     {
-                        unfilteredLine[col] = Up.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Up.UnFilter(in lineBuff, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 case CompressionPreFilter.Average:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                     {
-                        unfilteredLine[col] = Average.UnFilter(ref lineBuff, ref prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Average.UnFilter(in lineBuff, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 default:
@@ -776,41 +777,120 @@ namespace BNGCORE
                 Stopwatch sw = new();
                 sw.Start();
                 ProgressChangedEvent?.Invoke(0, (LayerID + 1, Frame.Layers.Count));
-                for (uint y = 0; y < numTilesY; y++)
+
+                if (1 == 2)
                 {
-                    for (uint x = 0; x < numTilesX; x++)
+                    for (uint y = 0; y < numTilesY; y++)
                     {
-                        var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, (x, y));
+                        for (uint x = 0; x < numTilesX; x++)
+                        {
+                            var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, (x, y));
+                            byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                            byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                            byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
+                            byte[] cBuff = Array.Empty<byte>();
+                            long inputOffset = 0;
+                            MemoryStream tileBuffer = new();
+
+                            for (int line = 0; line < corrTileSize.h; line++)
+                            {
+                                inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
+                                inputStream.Seek(inputOffset, SeekOrigin.Begin);
+                                
+                                inputStream.Read(lineBuff);
+                                FilterTileScanline(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
+                                tileBuffer.Write(filteredScanline);
+                                Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                            }
+
+                            Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
+                            Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
+                            Frame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
+
+                            bytesWritten += lineBuff.LongLength * corrTileSize.h;
+                            var progress = (double)bytesWritten / inputStream.Length * 100.0;
+                            if (sw.ElapsedMilliseconds >= 250 || progress == 100.0)
+                            {
+                                sw.Restart();
+                                ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
+                            }
+
+                            oStream.Write(cBuff);
+                            Frame.DataLength += (ulong)cBuff.LongLength;
+                        }
+                    }
+                }
+                else
+                {
+                    //Parallel processing
+                    int tileNum = (int)(numTilesY * numTilesX);
+                    byte[][] tileOutputBuffer = new byte[tileNum][];
+                    long[] bytesRead = new long[tileNum];
+                    var plResult = Parallel.For(0, tileNum, (int i) => {
+                        int x = i % (int)numTilesX;
+                        int y = i / (int)numTilesX;
+
+                        //Calculate the tile size for tiles that may be smaller due to the layer dimensions
+                        var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, ((uint)x, (uint)y));
+                        
                         byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                        MemoryStream iBuff = new MemoryStream();
                         byte[] cBuff = Array.Empty<byte>();
-                        long inputOffset = 0;
 
-                        for (int line = 0; line < corrTileSize.h; line++)
+                        //Apply the filter
+                        MemoryStream tileBuffer = new();
+                        lock (inputStream)
                         {
-                            inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
-                            inputStream.Seek(inputOffset, SeekOrigin.Begin);
-                            inputStream.Read(lineBuff);
-                            Filter(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, ref lineBuff, ref prevLineBuff, ref iBuff, BytesPerPixel);
-                            Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                            for (int line = 0; line < corrTileSize.h; line++)
+                            {
+                                long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
+                                inputStream.Seek(inputOffset, SeekOrigin.Begin);
+                                inputStream.Read(lineBuff);
+
+                                byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
+                                FilterTileScanline(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
+
+                                tileBuffer.Write(filteredScanline);
+                                bytesRead[i] += filteredScanline.Length;
+                                Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                            }
                         }
 
-                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, ref iBuff, ref cBuff);
-                        Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)cBuff.Length;
-                        Frame.LayerDataLengths[LayerID] += (ulong)cBuff.Length;
+                        //Compress tile data
+                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
 
-                        bytesWritten += lineBuff.LongLength * corrTileSize.h;
-                        var progress = (double)bytesWritten / inputStream.Length * 100.0;
-                        if (sw.ElapsedMilliseconds >= 250 || progress == 100.0)
+                        long readSoFar = 0;
+                        for (int ri = 0; ri < tileNum; ri++)
+                            readSoFar += bytesRead[i];
+
+                        var progress = (double)readSoFar / inputStream.Length * 100.0;
+                        ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
+
+                        //Add tile into the buffer
+                        tileOutputBuffer[i] = cBuff;
+                    });
+
+                    //While waiting for everything to be finished, flush out the ones that are finished in order
+
+                    var FlushTiles = () => {
+                        for (int ri = 0; ri < tileNum; ri++)
                         {
-                            sw.Restart();
-                            ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
+                            if(tileOutputBuffer[ri].LongLength > 0)
+                            {
+                                oStream.Write(tileOutputBuffer[ri]);
+                                tileOutputBuffer[ri] = new byte[0];
+                            }
                         }
+                    };
 
-                        oStream.Write(cBuff);
-                        Frame.DataLength += (ulong)cBuff.LongLength;
+                    while (!plResult.IsCompleted)
+                    {
+                        FlushTiles();
+                        Thread.Sleep(1);
                     }
+
+                    //Flush remaining tiles
+                    FlushTiles();
                 }
             }
 
@@ -862,49 +942,34 @@ namespace BNGCORE
             Array.Clear(headerData);
         }
 
-        void Filter(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, ref byte[] lineBuff, ref byte[] prevLineBuff, ref MemoryStream iBuff, int BytesPerPixel)
+        void FilterTileScanline(CompressionPreFilter compressionPreFilter, (uint w, uint h) corrTileSize, in byte[] lineBuff, in byte[] prevLineBuff, out byte[] filtered, int BytesPerPixel)
         {
+            filtered = new byte[corrTileSize.w * BytesPerPixel];
             switch (compressionPreFilter)
             {
                 case CompressionPreFilter.Paeth:
-                    byte[] paethLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++)
-                    {
-                        paethLineBuff[col] = Paeth.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                    }
-                    iBuff.Write(paethLineBuff);
+                        filtered[col] = Paeth.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     break;
                 case CompressionPreFilter.Sub:
-                    byte[] subLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++)
-                    {
-                        subLineBuff[col] = Sub.Filter(ref lineBuff, col, BytesPerPixel);
-                    }
-                    iBuff.Write(subLineBuff);
+                        filtered[col] = Sub.Filter(in lineBuff, col, BytesPerPixel);
                     break;
                 case CompressionPreFilter.Up:
-                    byte[] upLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++)
-                    {
-                        upLineBuff[col] = Up.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                    }
-                    iBuff.Write(upLineBuff);
+                        filtered[col] = Up.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     break;
                 case CompressionPreFilter.Average:
-                    byte[] avgLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                     for (long col = 0; col < lineBuff.LongLength; col++)
-                    {
-                        avgLineBuff[col] = Average.Filter(ref lineBuff, ref prevLineBuff, col, BytesPerPixel);
-                    }
-                    iBuff.Write(avgLineBuff);
+                        filtered[col] = Average.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     break;
                 default:
-                    iBuff.Write(lineBuff);
+                    Array.Copy(lineBuff, 0, filtered, 0, filtered.LongLength);
                     break;
             }
         }
 
-        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, ref MemoryStream iBuff, ref byte[] cBuff)
+        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, in MemoryStream iBuff, ref byte[] cBuff)
         {
             switch (compression)
             {

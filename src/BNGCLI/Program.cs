@@ -1,5 +1,6 @@
 ﻿using BNGCORE;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -563,14 +564,24 @@ namespace BNG_CLI {
                     string fil = p.InputFiles.Count > 1 ? "{0} files given " : "1 file given ";
                     Console.WriteLine(string.Format(fil + "--------------------------------", p.InputFiles.Count));
                     Bitmap BNG = new Bitmap();
-                    BNG.ProgressChangedEvent += pChanged;
 
+                    bool writingToConsoleE = false;
+                    TimeSpan lastE = new(DateTime.Now.Ticks);
                     void pChanged(double progress, (long item, long items) itemProgress) {
-                        Console.CursorLeft = 0;
-                        Console.Write(new string(' ', Console.WindowWidth));
-                        Console.CursorLeft = 0;
-                        Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
+                        TimeSpan nowE = new(DateTime.Now.Ticks);
+                        if ((!writingToConsoleE && (nowE - lastE).TotalMilliseconds > 100) || progress == 0.0 || progress == 100.0)
+                        {
+                            writingToConsoleE = true;
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
+                            Console.CursorLeft = 0;
+                            Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
+                            writingToConsoleE = false;
+                            lastE = new(DateTime.Now.Ticks);
+                        }
                     }
+
+                    BNG.ProgressChangedEvent += pChanged;
 
                     long frame = 0;
                     Stream nullStream = null;
