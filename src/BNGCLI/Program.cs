@@ -648,11 +648,17 @@ namespace BNG_CLI {
                                 string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
                                 Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+                                bool writingToConsole = false;
                                 void pChangedDec(double progress, (long item, long items) itemProgress) {
-                                    Console.CursorLeft = 0;
-                                    Console.Write(new string(' ', Console.WindowWidth));
-                                    Console.CursorLeft = 0;
-                                    Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
+                                    if (!writingToConsole)
+                                    {
+                                        writingToConsole = true;
+                                        Console.CursorLeft = 0;
+                                        Console.Write(new string(' ', Console.WindowWidth));
+                                        Console.CursorLeft = 0;
+                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
+                                        writingToConsole = false;
+                                    }
                                 }
 
                                 BNGToDecode.ProgressChangedEvent += pChangedDec;
