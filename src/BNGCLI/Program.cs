@@ -1,4 +1,4 @@
-﻿using BNGCORE;
+using BNGCORE;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;

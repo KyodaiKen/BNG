@@ -1,4 +1,4 @@
-﻿using BNGCORE.Compressors;
+using BNGCORE.Compressors;
 using BNGCORE.Filters;
 using MemoryPack;
 using MemoryPack.Compression;
