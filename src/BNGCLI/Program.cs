@@ -632,6 +632,7 @@ namespace BNG_CLI {
                         }
                         fsw.Stop();
                     }
+                    Console.WriteLine();
                     outFile.Close();
                     outFile.Dispose();
                     break;
@@ -640,7 +641,7 @@ namespace BNG_CLI {
                     long fi = 0;
                     foreach (var file in p.InputFiles) {
                         fi++;
-                        Console.WriteLine(string.Format("\nProcessing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)) + "\n");
+                        Console.WriteLine(string.Format("Processing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)));
 
                         Bitmap BNGToDecode = new Bitmap();
                         StringBuilder info = new();
@@ -649,6 +650,9 @@ namespace BNG_CLI {
                         Stream inFile = new FileStream(file.pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000);
 
                         TimeSpan last = new(DateTime.Now.Ticks);
+
+                        Stopwatch dsw = new();
+                        dsw.Start();
 
                         long cf = 0;
                         while(inFile.Position < inFile.Length) {
@@ -659,10 +663,14 @@ namespace BNG_CLI {
                                 break;
                             }
 
-                            string frTitle = string.Format("Found BNG frame {0}", cf);
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
+                            Console.CursorLeft = 0;
+                            string frTitle = string.Format("\nFound BNG frame {0}", cf);
                             Console.Write(frTitle + new string('=', 40 - frTitle.Length));
-                            Console.WriteLine(info.ToString());
+                            Console.Write(info.ToString());
                             for (var layer  = 0; layer < bng.Layers.Count; layer++) {
+                                Console.WriteLine("\nExtracting layer {0}/{1}...", layer+1, bng.Layers.Count);
                                 //Determine output file name
                                 string outNamePortion = string.Empty;
                                 if (outNamePortion == string.Empty) outNamePortion = bng.Layers[layer].Name;
@@ -688,17 +696,24 @@ namespace BNG_CLI {
                                 BNGToDecode.ProgressChangedEvent += pChangedDec;
                                 BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
+                                Console.CursorLeft = 0;
+                                Console.Write(new string(' ', Console.WindowWidth));
+                                Console.CursorLeft = 0;
+                                Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
+
                                 outFileDec.Close();
                                 outFileDec.Dispose();
                             }
                         }
+
+                        dsw.Stop();
                         inFile.Dispose();
                     }
                     break;
             }
 
             sw.Stop();
-            Console.Write(string.Format("\nOverall processing took {0}", sw.Elapsed));
+            Console.Write(string.Format("Overall processing took {0}\n", sw.Elapsed));
 
             return 0;
         }
