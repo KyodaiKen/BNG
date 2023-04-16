@@ -575,7 +575,13 @@ namespace BNG_CLI {
                             Console.CursorLeft = 0;
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
-                            Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ({3}/{4} tiles in pool)", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesInPool, progress.numTiles));
+                            if (progress.isMultithreaded)
+                            {
+                                Console.Write(string.Format("Layer {1}/{2}: ({3} tiles in progress, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                            } else
+                            {
+                                Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                            }
                             writingToConsoleE = false;
                             lastE = new(DateTime.Now.Ticks);
                         }
@@ -607,6 +613,8 @@ namespace BNG_CLI {
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                             Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
+                            Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
@@ -618,6 +626,8 @@ namespace BNG_CLI {
                             Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }

@@ -212,6 +212,8 @@ namespace BNGCORE
             public double progress;
             public int currentLayer;
             public int numLayers;
+            public bool isMultithreaded;
+            public int tilesProcessing;
             public int tilesInPool;
             public int numTiles;
         }
@@ -823,7 +825,7 @@ namespace BNGCORE
                             if (sw.ElapsedMilliseconds >= 250 || progress == 100.0)
                             {
                                 sw.Restart();
-                                ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count });
+                                ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, isMultithreaded = false });
                             }
 
                             oStream.Write(cBuff);
@@ -850,16 +852,19 @@ namespace BNGCORE
 
                             //Calculate progress
                             long dataProcessedSoFar = 0;
+                            int tilesProcessing = 0;
                             for (int ti = 0; ti < tileNum; ti++)
                             {
                                 if (tilesDone[ti])
                                 {
                                     int x = ti % (int)numTilesX;
                                     int y = ti / (int)numTilesX;
-
-                                    
                                     var td = Frame.Layers[LayerID].TileDimensions[x, y];
                                     dataProcessedSoFar += td.w * td.h * BytesPerPixel;
+                                }
+                                else
+                                {
+                                    tilesProcessing++;
                                 }
                             }
 
@@ -889,7 +894,7 @@ namespace BNGCORE
 
                             //Update progress
                             var progress = dataProcessedSoFar / (double)inputStream.Length * 100.0;
-                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum });
+                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum, tilesProcessing = tilesProcessing, isMultithreaded = true });
 
                             if (plResult.HasValue) 
                                 if ((bool)plResult?.IsCompleted)
