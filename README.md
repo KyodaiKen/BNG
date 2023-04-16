@@ -3,9 +3,13 @@
 Better Network Graphics / Borg Network Graphics
 
 ## Under development
-- Multi threading not developed yet
-- Encoding and decoding of raw images (raw pixel data) working! Tests look promising!
+- BNGView GUI for viewing (as well as exporting images to) BNG images
 - Layer compositing not implemented yet
+- Complete code refactoring and cleanup due
+
+## Milestones
+- Multi threading completed. Will be optimized more, though.
+- Core components completed, except layer compositing.
 
 ## Supports:
 - Pixel formats: Gray/Alpha only, Gray with Alpha, RGB, YCrCb, CMYK, RGBA, YCrCbA, CMYKA
