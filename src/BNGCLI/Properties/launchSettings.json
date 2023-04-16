@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i fn=gauntlets-gigapixel-32000x13956xRGB24.data,w=32000,h=13956,fropn=1;fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500,ltc=1;fn=screenshot.data,w=3840,h=2160,ltc=1,lcf=1,ensop=80 test.bng",
+      "commandLineArgs": "-v 2 -i compressed\\dragon_huge.bng decompressed",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

@@ -1,5 +1,6 @@
-﻿using BNGCORE;
+using BNGCORE;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -22,10 +23,12 @@ namespace BNG_CLI {
         public List<FileSource> InputFiles { get; set; }
         public string OutputFile { get; set; } = "";
         public bool ErrorState { get; set; }
+        public int VerboseLevel { get; set; } = 1;
 
         private string[] _args;
         private StringWriter Output { get; set; }
         private StringWriter Help { get; set; }
+
 
         private delegate void dgFoundArgCallback(long index);
         private delegate void dgArgNotFoundCallback();
@@ -59,6 +62,17 @@ namespace BNG_CLI {
             Task = Task.Decode;
             void FoundE(long index) {
                 _Task = Task.Encode;
+            }
+
+            FindArg("-v", FoundV);
+            void FoundV(long index)
+            {
+                if (index + 1 <= _args.Length)
+                {
+                    int parsedVerboseLevel = 0;
+                    int.TryParse(_args[index + 1], out parsedVerboseLevel);
+                    VerboseLevel = parsedVerboseLevel;
+                }
             }
 
             if (_Task == Task.Encode) {
@@ -109,7 +123,6 @@ namespace BNG_CLI {
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
                                "                                                                    If more is needed than set here, a temporary file in the\n"+
                                "                                                                    destination path is used instead.");
-
 
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
@@ -560,17 +573,32 @@ namespace BNG_CLI {
                     Stream outFile = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
                     outFile.SetLength(0);
 
-                    string fil = p.InputFiles.Count > 1 ? "{0} files given " : "1 file given ";
-                    Console.WriteLine(string.Format(fil + "--------------------------------", p.InputFiles.Count));
                     Bitmap BNG = new Bitmap();
-                    BNG.ProgressChangedEvent += pChanged;
 
-                    void pChanged(double progress, (long item, long items) itemProgress) {
-                        Console.CursorLeft = 0;
-                        Console.Write(new string(' ', Console.WindowWidth));
-                        Console.CursorLeft = 0;
-                        Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
+                    TimeSpan lastE = new(DateTime.Now.Ticks);
+                    void pChanged(Bitmap.progressBean progress) {
+                        TimeSpan nowE = new(DateTime.Now.Ticks);
+                        if ((nowE - lastE).TotalMilliseconds > 100 || progress.progress == 0.0 || progress.progress == 100.0)
+                        {
+                            lock (Console.Out)
+                            {
+                                Console.CursorLeft = 0;
+                                Console.Write(new string(' ', Console.WindowWidth));
+                                Console.CursorLeft = 0;
+                                if (progress.isMultithreaded)
+                                {
+                                    Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                                }
+                                else
+                                {
+                                    Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                                }
+                            }
+                            lastE = new(DateTime.Now.Ticks);
+                        }
                     }
+
+                    BNG.ProgressChangedEvent += pChanged;
 
                     long frame = 0;
                     Stream nullStream = null;
@@ -583,18 +611,20 @@ namespace BNG_CLI {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("New Frame {0}:", frame));
+                            Console.WriteLine(string.Format("Creating new frame {0}...", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
-                            Console.WriteLine("Writing file:");
-                            BNG.WriteBNGFrame(outFile);
+                            Console.WriteLine(string.Format("Writing Frame {0}...", frame));
+                            BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
@@ -602,16 +632,20 @@ namespace BNG_CLI {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("Writing Frame {0}:", frame));
-                            BNG.AddLayer(f.pathName, f.importParameters, nullStream);
-                            Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
-                            BNG.WriteBNGFrame(outFile);
+                            Console.WriteLine("\n" + string.Format("Creating Frame {0}/{1}...", frame, p.InputFiles.Count));
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
+                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
+                            BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         fsw.Stop();
                     }
+                    Console.WriteLine();
                     outFile.Close();
                     outFile.Dispose();
                     break;
@@ -620,27 +654,54 @@ namespace BNG_CLI {
                     long fi = 0;
                     foreach (var file in p.InputFiles) {
                         fi++;
-                        Console.WriteLine(string.Format("\nProcessing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)) + "\n");
+                        Console.WriteLine(string.Format("Processing input file {0}/{1}: {2}", fi, p.InputFiles.Count, Path.GetFileName(file.pathName)));
 
                         Bitmap BNGToDecode = new Bitmap();
                         StringBuilder info = new();
                         BNGToDecode.Strict = true;
-                        BNGToDecode.VerboseLevel = 1;
+                        BNGToDecode.VerboseLevel = p.VerboseLevel;
                         Stream inFile = new FileStream(file.pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000);
+
+                        TimeSpan last = new(DateTime.Now.Ticks);
+
+                        Stopwatch dsw = new();
+                        dsw.Start();
 
                         long cf = 0;
                         while(inFile.Position < inFile.Length) {
                             cf++;
                             FrameHeader bng;
-                            if (!BNGToDecode.LoadBNG(inFile, out info, out bng)) {
+                            if (!BNGToDecode.LoadBNG(ref inFile, out info, out bng)) {
                                 Console.WriteLine(fi > 1 ? "No further BNG frame was found. Finalizing..." : "Error: No BNG frame was found. Aborting...");
                                 break;
                             }
 
-                            string frTitle = string.Format("Found BNG frame {0}", cf);
+                            void pChangedDec(Bitmap.progressBean progress)
+                            {
+                                TimeSpan now = new(DateTime.Now.Ticks);
+                                if ((now - last).TotalMilliseconds > 100 || progress.progress == 0.0 || progress.progress == 100.0)
+                                {
+                                    lock(Console.Out)
+                                    {
+                                        Console.CursorLeft = 0;
+                                        Console.Write(new string(' ', Console.WindowWidth));
+                                        Console.CursorLeft = 0;
+                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", progress.currentLayer + 1, progress.numLayers, progress.progress));
+                                    }
+                                    last = new(DateTime.Now.Ticks);
+                                }
+                            }
+
+                            BNGToDecode.ProgressChangedEvent += pChangedDec;
+
+                            Console.CursorLeft = 0;
+                            Console.Write(new string(' ', Console.WindowWidth));
+                            Console.CursorLeft = 0;
+                            string frTitle = string.Format("\nFound BNG frame {0}", cf);
                             Console.Write(frTitle + new string('=', 40 - frTitle.Length));
-                            Console.WriteLine(info.ToString());
+                            Console.Write(info.ToString());
                             for (var layer  = 0; layer < bng.Layers.Count; layer++) {
+                                Console.WriteLine("\nExtracting layer {0}/{1}...", layer+1, bng.Layers.Count);
                                 //Determine output file name
                                 string outNamePortion = string.Empty;
                                 if (outNamePortion == string.Empty) outNamePortion = bng.Layers[layer].Name;
@@ -648,27 +709,26 @@ namespace BNG_CLI {
                                 string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
                                 Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                                void pChangedDec(double progress, (long item, long items) itemProgress) {
-                                    Console.CursorLeft = 0;
-                                    Console.Write(new string(' ', Console.WindowWidth));
-                                    Console.CursorLeft = 0;
-                                    Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
-                                }
+                                BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
-                                BNGToDecode.ProgressChangedEvent += pChangedDec;
-                                BNGToDecode.DecodeLayerToRaw(inFile, outFileDec, layer);
+                                Console.CursorLeft = 0;
+                                Console.Write(new string(' ', Console.WindowWidth));
+                                Console.CursorLeft = 0;
+                                Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
 
-                                outFileDec.Flush();
+                                outFileDec.Close();
                                 outFileDec.Dispose();
                             }
                         }
+
+                        dsw.Stop();
                         inFile.Dispose();
                     }
                     break;
             }
 
             sw.Stop();
-            Console.Write(string.Format("\nOverall processing took {0}", sw.Elapsed));
+            Console.Write(string.Format("Overall processing took {0}\n", sw.Elapsed));
 
             return 0;
         }
