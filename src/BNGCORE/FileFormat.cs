@@ -205,7 +205,7 @@ namespace BNGCORE
         private bool disposedValue;
 
         public bool Strict { get; set; } = false;
-        public int VerboseLevel { get; set; } = 0;
+        public int VerboseLevel { get; set; } = 1;
 
         public struct progressBean
         {
@@ -343,7 +343,7 @@ namespace BNGCORE
             {
                 if (VerboseLevel > 0)
                 {
-                    string lyrNum = string.Format("Layer {0}", layer) + " ";
+                    string lyrNum = string.Format("Layer {0}", layer+1) + " ";
                     log.Append("\n" + lyrNum);
                     log.AppendLine(new string('-', 40 - lyrNum.Length));
                     log.AppendLine(string.Format("Layer name...........: {0}", Frame.Layers[layer].Name));
@@ -387,7 +387,7 @@ namespace BNGCORE
                     {
                         if (VerboseLevel > 1)
                         {
-                            string tleNum = string.Format("Tile {0},{1}", tileX, tileY) + " ";
+                            string tleNum = string.Format("Tile {0},{1}", tileX+1, tileY+1) + " ";
                             log.Append("\n" + tleNum);
                             log.AppendLine(new string('-', 40 - tleNum.Length));
                         }

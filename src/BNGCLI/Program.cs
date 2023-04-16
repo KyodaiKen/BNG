@@ -23,10 +23,12 @@ namespace BNG_CLI {
         public List<FileSource> InputFiles { get; set; }
         public string OutputFile { get; set; } = "";
         public bool ErrorState { get; set; }
+        public int VerboseLevel { get; set; } = 1;
 
         private string[] _args;
         private StringWriter Output { get; set; }
         private StringWriter Help { get; set; }
+
 
         private delegate void dgFoundArgCallback(long index);
         private delegate void dgArgNotFoundCallback();
@@ -60,6 +62,17 @@ namespace BNG_CLI {
             Task = Task.Decode;
             void FoundE(long index) {
                 _Task = Task.Encode;
+            }
+
+            FindArg("-v", FoundV);
+            void FoundV(long index)
+            {
+                if (index + 1 <= _args.Length)
+                {
+                    int parsedVerboseLevel = 0;
+                    int.TryParse(_args[index + 1], out parsedVerboseLevel);
+                    VerboseLevel = parsedVerboseLevel;
+                }
             }
 
             if (_Task == Task.Encode) {
@@ -110,7 +123,6 @@ namespace BNG_CLI {
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
                                "                                                                    If more is needed than set here, a temporary file in the\n"+
                                "                                                                    destination path is used instead.");
-
 
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
@@ -563,24 +575,25 @@ namespace BNG_CLI {
 
                     Bitmap BNG = new Bitmap();
 
-                    bool writingToConsoleE = false;
                     TimeSpan lastE = new(DateTime.Now.Ticks);
                     void pChanged(Bitmap.progressBean progress) {
                         TimeSpan nowE = new(DateTime.Now.Ticks);
-                        if ((!writingToConsoleE && (nowE - lastE).TotalMilliseconds > 100) || progress.progress == 0.0 || progress.progress == 100.0)
+                        if ((nowE - lastE).TotalMilliseconds > 100 || progress.progress == 0.0 || progress.progress == 100.0)
                         {
-                            writingToConsoleE = true;
-                            Console.CursorLeft = 0;
-                            Console.Write(new string(' ', Console.WindowWidth));
-                            Console.CursorLeft = 0;
-                            if (progress.isMultithreaded)
+                            lock (Console.Out)
                             {
-                                Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
-                            } else
-                            {
-                                Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                                Console.CursorLeft = 0;
+                                Console.Write(new string(' ', Console.WindowWidth));
+                                Console.CursorLeft = 0;
+                                if (progress.isMultithreaded)
+                                {
+                                    Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                                }
+                                else
+                                {
+                                    Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                                }
                             }
-                            writingToConsoleE = false;
                             lastE = new(DateTime.Now.Ticks);
                         }
                     }
@@ -646,7 +659,7 @@ namespace BNG_CLI {
                         Bitmap BNGToDecode = new Bitmap();
                         StringBuilder info = new();
                         BNGToDecode.Strict = true;
-                        BNGToDecode.VerboseLevel = 1;
+                        BNGToDecode.VerboseLevel = p.VerboseLevel;
                         Stream inFile = new FileStream(file.pathName, FileMode.Open, FileAccess.Read, FileShare.Read, 0x800000);
 
                         TimeSpan last = new(DateTime.Now.Ticks);
@@ -663,6 +676,24 @@ namespace BNG_CLI {
                                 break;
                             }
 
+                            void pChangedDec(Bitmap.progressBean progress)
+                            {
+                                TimeSpan now = new(DateTime.Now.Ticks);
+                                if ((now - last).TotalMilliseconds > 100 || progress.progress == 0.0 || progress.progress == 100.0)
+                                {
+                                    lock(Console.Out)
+                                    {
+                                        Console.CursorLeft = 0;
+                                        Console.Write(new string(' ', Console.WindowWidth));
+                                        Console.CursorLeft = 0;
+                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", progress.currentLayer + 1, progress.numLayers, progress.progress));
+                                    }
+                                    last = new(DateTime.Now.Ticks);
+                                }
+                            }
+
+                            BNGToDecode.ProgressChangedEvent += pChangedDec;
+
                             Console.CursorLeft = 0;
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
@@ -678,22 +709,6 @@ namespace BNG_CLI {
                                 string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
                                 Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                                bool writingToConsole = false;
-                                void pChangedDec(Bitmap.progressBean progress) {
-                                    TimeSpan now = new(DateTime.Now.Ticks);
-                                    if ((!writingToConsole && (now - last).TotalMilliseconds > 100) || progress.progress == 0.0 || progress.progress == 100.0)
-                                    {
-                                        writingToConsole = true;
-                                        Console.CursorLeft = 0;
-                                        Console.Write(new string(' ', Console.WindowWidth));
-                                        Console.CursorLeft = 0;
-                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", progress.currentLayer + 1, progress.numLayers, progress.progress));
-                                        writingToConsole = false;
-                                        last = new(DateTime.Now.Ticks);
-                                    }
-                                }
-
-                                BNGToDecode.ProgressChangedEvent += pChangedDec;
                                 BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
                                 Console.CursorLeft = 0;

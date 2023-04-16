@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i fn=hug-24000x22000xRGB24.data,w=24000,h=22000,ensop=80 compressed\\hug.bng",
+      "commandLineArgs": "-v 2 -i compressed\\dragon_huge.bng decompressed",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }
