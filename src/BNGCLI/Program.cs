@@ -577,7 +577,7 @@ namespace BNG_CLI {
                             Console.CursorLeft = 0;
                             if (progress.isMultithreaded)
                             {
-                                Console.Write(string.Format("Layer {1}/{2}: ({3} tiles in progress, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                                Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
                             } else
                             {
                                 Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));

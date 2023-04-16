@@ -839,8 +839,7 @@ namespace BNGCORE
                     int tileNum = (int)(numTilesY * numTilesX);
                     Dictionary<int, byte[]> tileOutputBuffer = new();
                     bool[] tilesDone = new bool[tileNum];
-                    for (int i = 0; i < tileNum; i++)
-                        tilesDone[i] = false;
+                    bool[] tilesProcessing = new bool[tileNum];
 
                     ParallelLoopResult? plResult = null;
 
@@ -852,7 +851,7 @@ namespace BNGCORE
 
                             //Calculate progress
                             long dataProcessedSoFar = 0;
-                            int tilesProcessing = 0;
+                            int sumTilesProcessing = 0;
                             for (int ti = 0; ti < tileNum; ti++)
                             {
                                 if (tilesDone[ti])
@@ -861,10 +860,9 @@ namespace BNGCORE
                                     int y = ti / (int)numTilesX;
                                     var td = Frame.Layers[LayerID].TileDimensions[x, y];
                                     dataProcessedSoFar += td.w * td.h * BytesPerPixel;
-                                }
-                                else
+                                } else if (tilesProcessing[ti])
                                 {
-                                    tilesProcessing++;
+                                    sumTilesProcessing++;
                                 }
                             }
 
@@ -894,7 +892,7 @@ namespace BNGCORE
 
                             //Update progress
                             var progress = dataProcessedSoFar / (double)inputStream.Length * 100.0;
-                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum, tilesProcessing = tilesProcessing, isMultithreaded = true });
+                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum, tilesProcessing = sumTilesProcessing, isMultithreaded = true });
 
                             if (plResult.HasValue) 
                                 if ((bool)plResult?.IsCompleted)
@@ -904,6 +902,7 @@ namespace BNGCORE
 
                     //Run parallel tile processing
                     plResult = Parallel.For(0, tileNum, (int i) => {
+                        tilesProcessing[i] = true;
                         int x = i % (int)numTilesX;
                         int y = i / (int)numTilesX;
 
@@ -939,6 +938,7 @@ namespace BNGCORE
                         //Add tile into the buffer
                         tileOutputBuffer.Add(i, cBuff);
                         tilesDone[i] = true;
+                        tilesProcessing[i] = false;
                     });
 
                     while (!progressGovernor.IsCompleted)
