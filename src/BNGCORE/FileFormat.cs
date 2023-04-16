@@ -199,6 +199,14 @@ namespace BNGCORE
         public PixelFormat SourcePixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
     }
 
+    public class Tile
+    {
+        public long LayerID { get; set; }
+        public uint Width { get; set; }
+        public uint Height { get; set; }
+        public byte[] Data { get; set; }
+    }
+
     public class Bitmap : IDisposable
     {
         private FrameHeader Frame;
@@ -421,6 +429,20 @@ namespace BNGCORE
 
             header = Frame;
             return true;
+        }
+
+        public Tile GetTile((uint x, uint y) index, int layerID, Stream inputStream)
+        {
+            Layer layer = Frame.Layers[layerID];
+            Tile tile = new();
+            MemoryStream memTile = new();
+
+            UnpackTileToStream(layer, index, inputStream, memTile, Frame.Layers[layerID].BytesPerPixel);
+
+            tile.LayerID = layerID;
+            tile.Width = layer.TileDimensions[index.x, index.y].w;
+            tile.Height = layer.TileDimensions[index.x, index.y].h;
+            return tile;
         }
 
         public void DecodeLayerToRaw(Stream InputStream, Stream OutputStream, int LayerID)
