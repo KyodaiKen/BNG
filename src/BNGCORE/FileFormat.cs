@@ -2,6 +2,7 @@
 using BNGCORE.Filters;
 using MemoryPack;
 using MemoryPack.Compression;
+using MemoryPack.Formatters;
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -206,7 +207,16 @@ namespace BNGCORE
         public bool Strict { get; set; } = false;
         public int VerboseLevel { get; set; } = 0;
 
-        public delegate void dgProgressChanged(double progress, (long item, long items) itemProgress);
+        public struct progressBean
+        {
+            public double progress;
+            public int currentLayer;
+            public int numLayers;
+            public int tilesInPool;
+            public int numTiles;
+        }
+
+        public delegate void dgProgressChanged(progressBean progress);
         public dgProgressChanged ProgressChangedEvent { get; set; }
 
         public Bitmap()
@@ -445,7 +455,7 @@ namespace BNGCORE
                         if (sw.ElapsedMilliseconds >= 250 || progress == 100.0 || (Y == 0 && X == 0))
                         {
                             sw.Restart();
-                            ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
+                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count });
                         }
                     }
                 }
@@ -481,7 +491,7 @@ namespace BNGCORE
 
                         //Progress update
                         var progress = sumSoFar / (double)(layer.Width * layer.Height * bytesPerPixel) * 100.0;
-                        ProgressChangedEvent?.Invoke(progress, (LayerID, Frame.Layers.Count));
+                        ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count });
                     });
 
                     while (!plResult.IsCompleted)
@@ -776,7 +786,7 @@ namespace BNGCORE
 
                 Stopwatch sw = new();
                 sw.Start();
-                ProgressChangedEvent?.Invoke(0, (LayerID + 1, Frame.Layers.Count));
+                ProgressChangedEvent?.Invoke(new progressBean() { progress = 0, currentLayer = LayerID, numLayers = Frame.Layers.Count });
 
                 if (1 == 2)
                 {
@@ -812,7 +822,7 @@ namespace BNGCORE
                             if (sw.ElapsedMilliseconds >= 250 || progress == 100.0)
                             {
                                 sw.Restart();
-                                ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
+                                ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count });
                             }
 
                             oStream.Write(cBuff);
@@ -824,36 +834,58 @@ namespace BNGCORE
                 {
                     //Parallel processing
                     int tileNum = (int)(numTilesY * numTilesX);
-                    byte[][] tileOutputBuffer = new byte[tileNum][];
+                    Dictionary<int, byte[]> tileOutputBuffer = new();
                     long[] bytesRead = new long[tileNum];
+                    bool[] tilesDone = new bool[tileNum];
+                    for (int i = 0; i < tileNum; i++)
+                        tilesDone[i] = false;
 
-                    var FlushTiles = () => {
-                        for (int ri = 0; ri < tileNum; ri++)
+                    ParallelLoopResult? plResult = null;
+
+                    //Define progress governor
+                    var progressGovernor = Task.Run(() => {
+                        while (true)
                         {
-                            if (tileOutputBuffer[ri] != null)
+                            Thread.Sleep(50);
+                            //Flush finished tiles in sequence
+                            for (int ti = 0; ti < tileNum; ti++)
                             {
-                                if(tileOutputBuffer[ri].LongLength > 0)
+                                if (tilesDone[ti])
                                 {
-                                    int x = ri % (int)numTilesX;
-                                    int y = ri / (int)numTilesX;
-                                    oStream.Write(tileOutputBuffer[ri]);
-                                    Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)tileOutputBuffer[ri].Length;
-                                    Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ri].Length;
-                                    tileOutputBuffer[ri] = new byte[0];
+                                    if (tileOutputBuffer.ContainsKey(ti))
+                                    {
+                                        //This tile hasn't been flushed yet. Flush it and delete the data to free memory.
+                                        int x = ti % (int)numTilesX;
+                                        int y = ti / (int)numTilesX;
+                                        oStream.Write(tileOutputBuffer[ti]);
+                                        Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)tileOutputBuffer[ti].Length;
+                                        Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ti].Length;
+                                        tileOutputBuffer.Remove(ti);
+                                    }
                                 }
                                 else
                                 {
-                                    break; 
+                                    //Unfinished tile encountered! Stop processing and wait for the next governor iteration
+                                    break;
                                 }
                             }
-                            else
-                            {
-                                break;
-                            }
-                        }
-                    };
 
-                    var plResult = Parallel.For(0, tileNum, (int i) => {
+                            //Update progress
+                            long readSoFar = 0;
+                            for (int ri = 0; ri < tileNum; ri++)
+                                readSoFar += bytesRead[ri];
+
+                            var progress = (double)readSoFar / inputStream.Length * 100.0;
+                            ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum });
+
+                            if (plResult.HasValue) 
+                                if ((bool)plResult?.IsCompleted)
+                                    break;
+                        }
+                    });
+
+                    //Run parallel tile processing
+                    plResult = Parallel.For(0, tileNum, (int i) => {
                         int x = i % (int)numTilesX;
                         int y = i / (int)numTilesX;
 
@@ -880,23 +912,18 @@ namespace BNGCORE
                                 tileBuffer.Write(filteredScanline);
                                 Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                             }
-
-                            long readSoFar = 0;
-                            for (int ri = 0; ri < tileNum; ri++)
-                                readSoFar += bytesRead[i];
-
-                            var progress = (double)readSoFar / inputStream.Length * 100.0;
-                            ProgressChangedEvent?.Invoke(progress, (LayerID + 1, Frame.Layers.Count));
                         }
 
                         //Compress tile data
                         Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
 
                         //Add tile into the buffer
-                        tileOutputBuffer[i] = cBuff;
+                        tileOutputBuffer.Add(i, cBuff);
+                        tilesDone[i] = true;
                     });
 
-                    FlushTiles();
+                    while (!progressGovernor.IsCompleted)
+                        Thread.Sleep(10);
                 }
             }
 

@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i fn=gauntlets-gigapixel-32000x13956xRGB24.data,w=32000,h=13956,ensop=80 compressed\\huge.bng",
+      "commandLineArgs": "-e -i fn=hug-24000x22000xRGB24.data,w=24000,h=22000,ensop=80 compressed\\hug.bng",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

@@ -567,15 +567,15 @@ namespace BNG_CLI {
 
                     bool writingToConsoleE = false;
                     TimeSpan lastE = new(DateTime.Now.Ticks);
-                    void pChanged(double progress, (long item, long items) itemProgress) {
+                    void pChanged(Bitmap.progressBean progress) {
                         TimeSpan nowE = new(DateTime.Now.Ticks);
-                        if ((!writingToConsoleE && (nowE - lastE).TotalMilliseconds > 100) || progress == 0.0 || progress == 100.0)
+                        if ((!writingToConsoleE && (nowE - lastE).TotalMilliseconds > 100) || progress.progress == 0.0 || progress.progress == 100.0)
                         {
                             writingToConsoleE = true;
                             Console.CursorLeft = 0;
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.CursorLeft = 0;
-                            Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ", progress, itemProgress.item, itemProgress.items));
+                            Console.Write(string.Format("Layer {1}/{2} {0:0.00}% ({3}/{4} tiles in pool)", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesInPool, progress.numTiles));
                             writingToConsoleE = false;
                             lastE = new(DateTime.Now.Ticks);
                         }
@@ -662,15 +662,15 @@ namespace BNG_CLI {
 
                                 Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
                                 bool writingToConsole = false;
-                                void pChangedDec(double progress, (long item, long items) itemProgress) {
+                                void pChangedDec(Bitmap.progressBean progress) {
                                     TimeSpan now = new(DateTime.Now.Ticks);
-                                    if ((!writingToConsole && (now - last).TotalMilliseconds > 100) || progress == 0.0 || progress == 100.0)
+                                    if ((!writingToConsole && (now - last).TotalMilliseconds > 100) || progress.progress == 0.0 || progress.progress == 100.0)
                                     {
                                         writingToConsole = true;
                                         Console.CursorLeft = 0;
                                         Console.Write(new string(' ', Console.WindowWidth));
                                         Console.CursorLeft = 0;
-                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", layer + 1, bng.Layers.Count, progress));
+                                        Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", progress.currentLayer + 1, progress.numLayers, progress.progress));
                                         writingToConsole = false;
                                         last = new(DateTime.Now.Ticks);
                                     }
