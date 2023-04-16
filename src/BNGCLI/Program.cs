@@ -561,8 +561,6 @@ namespace BNG_CLI {
                     Stream outFile = new FileStream(p.OutputFile, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x800000);
                     outFile.SetLength(0);
 
-                    string fil = p.InputFiles.Count > 1 ? "{0} files given " : "1 file given ";
-                    Console.WriteLine(string.Format(fil + "--------------------------------", p.InputFiles.Count));
                     Bitmap BNG = new Bitmap();
 
                     bool writingToConsoleE = false;
@@ -600,7 +598,7 @@ namespace BNG_CLI {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("New Frame {0}:", frame));
+                            Console.WriteLine(string.Format("Creating new frame {0}...", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
                             BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
@@ -609,7 +607,7 @@ namespace BNG_CLI {
                             BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
-                            Console.WriteLine("Writing file:");
+                            Console.WriteLine(string.Format("Writing Frame {0}...", frame));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                             Console.CursorLeft = 0;
@@ -621,9 +619,10 @@ namespace BNG_CLI {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("Writing Frame {0}:", frame));
+                            Console.WriteLine("\n" + string.Format("Creating Frame {0}/{1}...", frame, p.InputFiles.Count));
+                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
                             BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
-                            Console.WriteLine("Processing layer from " + Path.GetFileName(f.pathName) + ":");
+                            Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                             Console.CursorLeft = 0;
@@ -689,7 +688,7 @@ namespace BNG_CLI {
                                 BNGToDecode.ProgressChangedEvent += pChangedDec;
                                 BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
-                                outFileDec.Flush();
+                                outFileDec.Close();
                                 outFileDec.Dispose();
                             }
                         }
