@@ -771,6 +771,7 @@ namespace BNGCORE
                 long bytesWritten = 0;
 
                 Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
+                Frame.Layers[LayerID].TileDimensions = new (uint w, uint h)[numTilesX, numTilesY];
 
                 Stream inputStream;
 
@@ -835,28 +836,44 @@ namespace BNGCORE
                     //Parallel processing
                     int tileNum = (int)(numTilesY * numTilesX);
                     Dictionary<int, byte[]> tileOutputBuffer = new();
-                    long[] bytesRead = new long[tileNum];
                     bool[] tilesDone = new bool[tileNum];
                     for (int i = 0; i < tileNum; i++)
                         tilesDone[i] = false;
 
                     ParallelLoopResult? plResult = null;
 
-                    //Define progress governor
+                    //Run progress governor
                     var progressGovernor = Task.Run(() => {
                         while (true)
                         {
                             Thread.Sleep(50);
+
+                            //Calculate progress
+                            long dataProcessedSoFar = 0;
+                            for (int ti = 0; ti < tileNum; ti++)
+                            {
+                                if (tilesDone[ti])
+                                {
+                                    int x = ti % (int)numTilesX;
+                                    int y = ti / (int)numTilesX;
+
+                                    
+                                    var td = Frame.Layers[LayerID].TileDimensions[x, y];
+                                    dataProcessedSoFar += td.w * td.h * BytesPerPixel;
+                                }
+                            }
+
                             //Flush finished tiles in sequence
                             for (int ti = 0; ti < tileNum; ti++)
                             {
+                                int x = ti % (int)numTilesX;
+                                int y = ti / (int)numTilesX;
+
                                 if (tilesDone[ti])
                                 {
                                     if (tileOutputBuffer.ContainsKey(ti))
                                     {
                                         //This tile hasn't been flushed yet. Flush it and delete the data to free memory.
-                                        int x = ti % (int)numTilesX;
-                                        int y = ti / (int)numTilesX;
                                         oStream.Write(tileOutputBuffer[ti]);
                                         Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)tileOutputBuffer[ti].Length;
                                         Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ti].Length;
@@ -871,11 +888,7 @@ namespace BNGCORE
                             }
 
                             //Update progress
-                            long readSoFar = 0;
-                            for (int ri = 0; ri < tileNum; ri++)
-                                readSoFar += bytesRead[ri];
-
-                            var progress = (double)readSoFar / inputStream.Length * 100.0;
+                            var progress = dataProcessedSoFar / (double)inputStream.Length * 100.0;
                             ProgressChangedEvent?.Invoke(new progressBean() { progress = progress, currentLayer = LayerID, numLayers = Frame.Layers.Count, tilesInPool = tileOutputBuffer.Count, numTiles = tileNum });
 
                             if (plResult.HasValue) 
@@ -891,7 +904,8 @@ namespace BNGCORE
 
                         //Calculate the tile size for tiles that may be smaller due to the layer dimensions
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, ((uint)x, (uint)y));
-                        
+                        Frame.Layers[LayerID].TileDimensions[x, y] = corrTileSize;
+
                         byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] cBuff = Array.Empty<byte>();
@@ -904,7 +918,7 @@ namespace BNGCORE
                             {
                                 long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
                                 inputStream.Seek(inputOffset, SeekOrigin.Begin);
-                                bytesRead[i] += inputStream.Read(lineBuff);
+                                inputStream.Read(lineBuff);
 
                                 byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
                                 FilterTileScanline(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
