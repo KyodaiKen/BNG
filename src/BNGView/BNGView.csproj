@@ -43,6 +43,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\BNGCORE\BNGCORE.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Compile Update="ImGuiController.cs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Compile>

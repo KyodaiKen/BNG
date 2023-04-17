@@ -11,6 +11,10 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Formats;
 using static ImGuiNET.ImGuiNative;
 using SixLabors.ImageSharp.PixelFormats;
+using BNGCORE;
+using System.Text;
+using Vortice.DCommon;
+using System.Net.Http.Headers;
 
 namespace ImGuiNET
 {
@@ -49,8 +53,7 @@ namespace ImGuiNET
                 GraphicsBackend.Vulkan,
                 out _window,
                 out _gd);
-            _window.Resized += () =>
-            {
+            _window.Resized += () => {
                 _gd.MainSwapchain.Resize((uint)_window.Width, (uint)_window.Height);
                 _controller.WindowResized(_window.Width, _window.Height);
             };
@@ -59,25 +62,12 @@ namespace ImGuiNET
 
 
             //Pass file name for opening a file
-            if(args.Length > 0 )
+            if (args.Length > 0)
             {
                 _ImageFileName = args[0];
-                if (Path.GetExtension(_ImageFileName).ToLower() == "bng")
-                {
-
-                }
-                else
-                {
-                    _img = new ImageSharpTexture(_ImageFileName);
-                    var dimg = _img.CreateDeviceTexture(_gd, _gd.ResourceFactory);
-
-                    var viewDesc = new TextureViewDescription(dimg, PixelFormat.R8_G8_B8_A8_UNorm); //Pixel Format needed may change, I found UNorm looks closer to the image src then UnormSRGB does 
-                    var textureView = _gd.ResourceFactory.CreateTextureView(viewDesc);
-
-                    _imgPtr = _controller.GetOrCreateImGuiBinding(_gd.ResourceFactory, textureView);
-                }
+                LoadImage();
             }
-            
+
             var stopwatch = Stopwatch.StartNew();
             float deltaTime = 0f;
             // Main application loop
@@ -94,7 +84,7 @@ namespace ImGuiNET
                     switch (keyEvt.Key)
                     {
                         case Key.Space:
-                            if(keyEvt.Down)
+                            if (keyEvt.Down)
                                 _showGUI = !_showGUI;
                             break;
                     }
@@ -116,6 +106,75 @@ namespace ImGuiNET
             _controller.Dispose();
             _cl.Dispose();
             _gd.Dispose();
+        }
+
+        private static unsafe void LoadBNG()
+        {
+            BNGCORE.Bitmap b = new();
+            Stream fs = new FileStream(_ImageFileName, FileMode.Open, FileAccess.Read, FileShare.Read, 4096);
+            StringBuilder log = new();
+            FrameHeader fh;
+            b.LoadBNG(ref fs, out log, out fh);
+
+            MemoryStream rawBitmapData = new();
+
+            b.DecodeLayerToRaw(fs, rawBitmapData, 0);
+
+            var layer = fh.Layers[0];
+
+            Image<Rgba32> image;
+
+            if (layer.ColorSpace == ColorSpace.RGB)
+            {
+                Image<Rgb24> tmp = Image.LoadPixelData<Rgb24>((byte[])rawBitmapData.ToArray(), (int)fh.Width, (int)fh.Height);
+                image = tmp.CloneAs<Rgba32>();
+            }
+            else if (layer.ColorSpace == ColorSpace.GRAY)
+            {
+                Image<L8> tmp = Image.LoadPixelData<L8>((byte[])rawBitmapData.ToArray(), (int)fh.Width, (int)fh.Height);
+                image = tmp.CloneAs<Rgba32>();
+            }
+            else
+            {
+                image = Image.LoadPixelData<Rgba32>((byte[])rawBitmapData.ToArray(), (int)fh.Width, (int)fh.Height);
+            }
+
+            _img = new ImageSharpTexture(image, false, true);
+
+            var dimg = _img.CreateDeviceTexture(_gd, _gd.ResourceFactory);
+
+            var viewDesc = new TextureViewDescription(dimg, Veldrid.PixelFormat.R8_G8_B8_A8_UNorm);
+            var textureView = _gd.ResourceFactory.CreateTextureView(viewDesc);
+
+            _imgPtr = _controller.GetOrCreateImGuiBinding(_gd.ResourceFactory, textureView);
+        }
+
+        private static unsafe void LoadOther()
+        {
+            _img = new ImageSharpTexture(_ImageFileName);
+
+            var dimg = _img.CreateDeviceTexture(_gd, _gd.ResourceFactory);
+
+            var viewDesc = new TextureViewDescription(dimg, Veldrid.PixelFormat.R8_G8_B8_A8_UNorm);
+            var textureView = _gd.ResourceFactory.CreateTextureView(viewDesc);
+
+            _imgPtr = _controller.GetOrCreateImGuiBinding(_gd.ResourceFactory, textureView);
+        }
+
+        private static unsafe void LoadImage()
+        {
+            switch (Path.GetExtension(_ImageFileName).ToLower())
+            {
+                case ".bng":
+                    LoadBNG();
+                    break;
+
+                default:
+                    LoadOther();
+                    break;
+            }
+
+            _showGUI = false;
         }
 
         private static unsafe void SubmitUI()
@@ -154,17 +213,8 @@ namespace ImGuiNET
                             var dlgResult = NativeFileDialogSharp.Dialog.FileOpen("bng;png;tiff;tif;gif");
                             if(dlgResult.IsOk)
                             {
-                                var path = dlgResult.Path;
-                                Debug.WriteLine(dlgResult.Path);
-                                _img = new ImageSharpTexture(dlgResult.Path);
-                                
-                                var dimg = _img.CreateDeviceTexture(_gd, _gd.ResourceFactory);
-
-                                var viewDesc = new TextureViewDescription(dimg, PixelFormat.R8_G8_B8_A8_UNorm);
-                                var textureView = _gd.ResourceFactory.CreateTextureView(viewDesc);
-
-                                _imgPtr = _controller.GetOrCreateImGuiBinding(_gd.ResourceFactory, textureView); 
-
+                                _ImageFileName = dlgResult.Path;
+                                LoadImage();
                             }
                         }
                         if (ImGui.MenuItem("Export as..."))
