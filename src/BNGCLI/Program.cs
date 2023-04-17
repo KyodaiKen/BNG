@@ -582,9 +582,9 @@ namespace BNG_CLI {
                         {
                             lock (Console.Out)
                             {
-                                Console.CursorLeft = 0;
+                                Console.Write('\r');
                                 Console.Write(new string(' ', Console.WindowWidth));
-                                Console.CursorLeft = 0;
+                                Console.Write('\r');
                                 if (progress.isMultithreaded)
                                 {
                                     Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
@@ -623,9 +623,9 @@ namespace BNG_CLI {
                             Console.WriteLine(string.Format("Writing Frame {0}...", frame));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         if (!f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
@@ -638,9 +638,9 @@ namespace BNG_CLI {
                             Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
                         }
                         fsw.Stop();
@@ -683,9 +683,9 @@ namespace BNG_CLI {
                                 {
                                     lock(Console.Out)
                                     {
-                                        Console.CursorLeft = 0;
+                                        Console.Write('\r');
                                         Console.Write(new string(' ', Console.WindowWidth));
-                                        Console.CursorLeft = 0;
+                                        Console.Write('\r');
                                         Console.Write(string.Format("Layer {0}/{1} {2:0.00}%", progress.currentLayer + 1, progress.numLayers, progress.progress));
                                     }
                                     last = new(DateTime.Now.Ticks);
@@ -694,9 +694,9 @@ namespace BNG_CLI {
 
                             BNGToDecode.ProgressChangedEvent += pChangedDec;
 
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
-                            Console.CursorLeft = 0;
+                            Console.Write('\r');
                             string frTitle = string.Format("\nFound BNG frame {0}", cf);
                             Console.Write(frTitle + new string('=', 40 - frTitle.Length));
                             Console.Write(info.ToString());
@@ -708,12 +708,12 @@ namespace BNG_CLI {
                                 if (outNamePortion == string.Empty) outNamePortion = "_" + cf.ToString();
                                 string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
-                                Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + "\\" + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+                                Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + Path.DirectorySeparatorChar + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
                                 BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
 
-                                Console.CursorLeft = 0;
+                                Console.Write('\r');
                                 Console.Write(new string(' ', Console.WindowWidth));
-                                Console.CursorLeft = 0;
+                                Console.Write('\r');
                                 Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
 
                                 outFileDec.Close();
