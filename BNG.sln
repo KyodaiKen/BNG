@@ -7,7 +7,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BNGCLI", "src\BNGCLI\BNGCLI
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BNGCORE", "src\BNGCORE\BNGCORE.csproj", "{F7F5D9B4-598D-4043-A447-641F91008D3C}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BNGView", "src\BNGView\BNGView.csproj", "{C6B6B501-0A52-4B4A-AA52-907908D87065}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BNGView", "src\BNGView\BNGView.csproj", "{A7FF12F0-10B6-4522-8D05-54392E812419}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -23,10 +23,10 @@ Global
 		{F7F5D9B4-598D-4043-A447-641F91008D3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F7F5D9B4-598D-4043-A447-641F91008D3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F7F5D9B4-598D-4043-A447-641F91008D3C}.Release|Any CPU.Build.0 = Release|Any CPU
-		{C6B6B501-0A52-4B4A-AA52-907908D87065}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{C6B6B501-0A52-4B4A-AA52-907908D87065}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{C6B6B501-0A52-4B4A-AA52-907908D87065}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{C6B6B501-0A52-4B4A-AA52-907908D87065}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A7FF12F0-10B6-4522-8D05-54392E812419}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A7FF12F0-10B6-4522-8D05-54392E812419}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A7FF12F0-10B6-4522-8D05-54392E812419}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A7FF12F0-10B6-4522-8D05-54392E812419}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

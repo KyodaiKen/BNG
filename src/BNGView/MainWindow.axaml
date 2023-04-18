@@ -1,0 +1,50 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="BNGView.MainWindow"
+		Width="640" Height="480"
+        Title="BNGView">
+		<Window.Styles>
+			<Style Selector="Window">
+				<Setter Property="FontFamily" Value="DejaVu Sans Mono, Hack, Monospace" />
+			</Style>
+			<Style Selector="TabControl TabItem">
+				<Setter Property="FontSize" Value="14"/>
+				<Setter Property="Margin" Value="0 0 0 0"/>
+				<Setter Property="Padding" Value="10 0"/>
+			</Style>
+		</Window.Styles>
+		<Grid RowDefinitions="Auto, *, Auto" ColumnDefinitions="*, Auto" Background="Transparent">
+			<Grid Name="TopBar" ColumnDefinitions="Auto, *" Grid.Column="0" Grid.ColumnSpan="3" Background="#002234">
+				<StackPanel Orientation="Horizontal" Grid.Column="0">
+					<Button Name="HideUI" Content="⭶" Click="OnHideUIButtonClick" Margin="8 0 12 0" FontSize="12"></Button>
+					<Button Content="Open"></Button>
+					<Button Content="Export as..."></Button>
+				</StackPanel>
+				<TabControl Grid.Column="1" Classes="tc" Margin="8 0 8 0" Items="{Binding}">
+					<TabControl.ItemTemplate>
+						<DataTemplate>
+							<TextBlock Text="{Binding Header}" />
+						</DataTemplate>
+					</TabControl.ItemTemplate>
+				</TabControl>
+			</Grid>
+			<ScrollViewer Name="ScrollView" Padding="0" Margin="0" HorizontalScrollBarVisibility="Auto" HorizontalContentAlignment="Left" VerticalContentAlignment="Top"
+						   Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2" Grid.RowSpan="2" PointerPressed="OnDragStart" PointerMoved="OnDragging" PointerReleased="OnDragEnd">
+				<Image Name="BitmapImageObject" PointerReleased="OnImageSpaceClick"></Image>
+			</ScrollViewer>
+			<Grid Name="Navigator" Grid.Row="2" Grid.Column="2" RowDefinitions="Auto * Auto Auto" Width="256" Height="320" Background="#000B15" Opacity=".6">
+				<TextBlock HorizontalAlignment="Center" Margin="8" FontSize="16" FontWeight="Bold" Grid.Row="0">Navigator</TextBlock>
+				<Image Name="NavigationImage" Grid.Row="1" Opacity="1"></Image>
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Grid.Row="2">
+					<TextBox Name="ZoomTextBox" HorizontalAlignment="Center" PropertyChanged="ZoomTextBoxPropertyChanged">100</TextBox>
+					<Label Margin="8 0 0 0" VerticalAlignment="Center">%</Label>
+				</StackPanel>
+				<Slider Name="ZoomLevelSlider" Minimum="0" Maximum="400" Grid.Row="3" Margin="12 0 12 0"
+						Value="100" TickFrequency="25" IsSnapToTickEnabled="True" TickPlacement="BottomRight"
+						PropertyChanged="ZoomSliderPropertyChanged"></Slider>
+			</Grid>
+		</Grid>
+</Window>
