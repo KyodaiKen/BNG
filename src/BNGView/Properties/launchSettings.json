@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "BNGView": {
+      "commandName": "Project",
+      "commandLineArgs": "\"D:\\temp\\bng_test\\compressed\\hand.bng\""
+    }
+  }
+}

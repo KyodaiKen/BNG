@@ -23,6 +23,7 @@ namespace BNGView
 
     public partial class MainWindow : Window
     {
+        public string[] _args { get; set; }
         private double _zoomLevel;
         private bool _dragging;
         private Vector pointerPosOnDragStart;
@@ -50,23 +51,20 @@ namespace BNGView
         public MainWindow()
         {
             InitializeComponent();
-
             LoadedBitmaps = new();
+            _dragging = false;
+        }
 
+        public MainWindow(string[] args)
+        {
+            InitializeComponent();
+            LoadedBitmaps = new();
             _dragging = false;
 
-            //Test load image
-            var b = new LoadedBitmap();
-            var fileName = @"D:\temp\bng_test\compressed\dragon.bng";
-            b.Bitmap = LoadImageFromBNG(fileName);
-            b.FileName = fileName;
-
-            LoadedBitmaps.Add(b);
-            BitmapImageObject.Source = LoadedBitmaps.First().Bitmap;
-            ScrollView.Arrange(new Avalonia.Rect(0, 0, b.Bitmap.PixelSize.Width / 2, b.Bitmap.PixelSize.Height));
-            ScrollView.Measure(new Avalonia.Size(b.Bitmap.PixelSize.Width / 2, b.Bitmap.PixelSize.Height));
-            Debug.WriteLine(ScrollView.Viewport.ToString());
-            activeBitmapID = 0;
+            if (args.Length > 0)
+            {
+                LoadThisImage(args[0]);
+            }
         }
 
         void RebuildTabs()
@@ -157,15 +155,52 @@ namespace BNGView
                 return new Bitmap(Avalonia.Platform.PixelFormat.Rgba8888
                                 , Avalonia.Platform.AlphaFormat.Unpremul
                                 , (nint)p, new Avalonia.PixelSize((int)layer.Width, (int)layer.Height)
-                                , new Avalonia.Vector(header.ResolutionH, header.ResolutionV)
+                                , new Avalonia.Vector(96, 96)
                                 , (int)(header.Width * 4));
             }
             
         }
 
-        Bitmap LoadImage(string fileName)
+        Bitmap LoadOtherImage(string fileName)
         {
             return new Bitmap(fileName);
+        }
+
+        Bitmap LoadImage(string fileName)
+        {
+            if (Path.GetExtension(fileName).ToLower() == ".bng")
+            {
+                return LoadImageFromBNG(fileName);
+            }
+            else
+            {
+                return LoadOtherImage(fileName);
+            }
+        }
+
+        void LoadThisImage(string fileName)
+        {
+            var b = new LoadedBitmap();
+            b.Bitmap = LoadImage(fileName);
+            b.FileName = fileName;
+
+            if(LoadedBitmaps.Count>0) LoadedBitmaps.Remove(LoadedBitmaps.First());
+            LoadedBitmaps.Add(b);
+            BitmapImageObject.Source = LoadedBitmaps.First().Bitmap;
+            activeBitmapID = 0;
+
+            ScrollView.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
+            Navigator.IsVisible = false;
+            TopBar.IsVisible = false;
+        }
+
+        void OnOpenButtonClick(object sender, RoutedEventArgs args)
+        {
+            var rslt = NativeFileDialogSharp.Dialog.FileOpen("bng;png;tif;tiff;gif;jpeg;jpg");
+            if (rslt.IsOk)
+            {
+                LoadThisImage(rslt.Path);
+            }
         }
 
         void OnHideUIButtonClick(object sender, RoutedEventArgs args)

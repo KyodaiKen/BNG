@@ -20,7 +20,7 @@
 			<Grid Name="TopBar" ColumnDefinitions="Auto, *" Grid.Column="0" Grid.ColumnSpan="3" Background="#002234">
 				<StackPanel Orientation="Horizontal" Grid.Column="0">
 					<Button Name="HideUI" Content="⭶" Click="OnHideUIButtonClick" Margin="8 0 12 0" FontSize="12"></Button>
-					<Button Content="Open"></Button>
+					<Button Content="Open" Click="OnOpenButtonClick"></Button>
 					<Button Content="Export as..."></Button>
 				</StackPanel>
 				<TabControl Grid.Column="1" Classes="tc" Margin="8 0 8 0" Items="{Binding}">
