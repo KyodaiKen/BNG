@@ -193,6 +193,11 @@ namespace BNGView
             Navigator.IsVisible = false;
             TopBar.IsVisible = false;
         }
+        void OnHideUIButtonClick(object sender, RoutedEventArgs args)
+        {
+            Navigator.IsVisible = false;
+            TopBar.IsVisible = false;
+        }
 
         void OnOpenButtonClick(object sender, RoutedEventArgs args)
         {
@@ -203,10 +208,21 @@ namespace BNGView
             }
         }
 
-        void OnHideUIButtonClick(object sender, RoutedEventArgs args)
+        void OnExportButtonClick(object sender, RoutedEventArgs args)
         {
-            Navigator.IsVisible = false;
-            TopBar.IsVisible = false;
+            var rslt = NativeFileDialogSharp.Dialog.FileSave("bng;png;tif;tiff;gif;jpeg;jpg");
+            if(rslt.IsOk)
+            {
+                var fileName = rslt.Path;
+                if (Path.GetExtension(fileName).ToLower() == ".bng")
+                {
+                    var msgBox = MessageBox.Avalonia.MessageBoxManager.GetMessageBoxStandardWindow("Error", "Not implemented yet!", MessageBox.Avalonia.Enums.ButtonEnum.Ok, MessageBox.Avalonia.Enums.Icon.Error).Show();
+                }
+                else
+                {
+                    LoadedBitmaps.First().Bitmap.Save(fileName);
+                }
+            }
         }
 
         void OnImageSpaceClick(object sender, Avalonia.Input.PointerReleasedEventArgs args)
