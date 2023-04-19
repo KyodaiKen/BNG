@@ -189,6 +189,8 @@ namespace BNGView
             BitmapImageObject.Source = LoadedBitmaps.First().Bitmap;
             activeBitmapID = 0;
 
+            BitmapImageObject.Width = LoadedBitmaps[activeBitmapID].Bitmap.PixelSize.Width * _zoomLevel;
+            BitmapImageObject.Height = LoadedBitmaps[activeBitmapID].Bitmap.PixelSize.Height * _zoomLevel;
             ScrollView.Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand);
             Navigator.IsVisible = false;
             TopBar.IsVisible = false;
