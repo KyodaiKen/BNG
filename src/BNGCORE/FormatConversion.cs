@@ -161,6 +161,7 @@ namespace BNGCORE.FormatConversion
                         for (int j = 0; j < targetNumChannels; j++)
                         {
                             byte[] temp = (byte[])getBytes.Invoke(null, new object[] { sChValues[j] });
+                            if (targetToBeBigEndian) Array.Reverse(temp);
                             outValueBytes.Write(temp);
                         }
                         Array.Copy(tChValues, i, outputBytes, i * targetNumChannels * size, size);
