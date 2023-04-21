@@ -87,82 +87,52 @@ namespace BNGCORE.FormatConversion
             string methodName = "To" + typeof(T).ToString().Split('.')[1]; // System.Half -> ToHalf
             if (methodName == "ToSByte") methodName = "ToChar";
 
-            bool isFloat = false;
-            int targetSize = 0;
             ulong maxVal = 0;
-            switch (sourceFormat)
-            {
-                case "System.Half":
-                    isFloat = true;
-                    break;
-                case "System.Single":
-                    isFloat = true;
-                    break;
-                case "System.Double":
-                    isFloat = true;
-                    break;
-            }
-
             switch (typeof(T).ToString())
             {
                 case "System.SByte":
-                    targetSize = 1;
                     maxVal = byte.MaxValue;
                     break;
                 case "System.Int16":
-                    targetSize = 2;
                     maxVal = (ulong)short.MaxValue;
                     break;
                 case "System.Int32":
-                    targetSize = 4;
                     maxVal = int.MaxValue;
                     break;
                 case "System.Int64":
-                    targetSize = 8;
                     maxVal = long.MaxValue;
                     break;
                 case "System.Byte":
-                    targetSize = 1;
                     maxVal = (ulong)sbyte.MaxValue;
                     break;
                 case "System.UInt16":
-                    targetSize = 2;
                     maxVal = ushort.MaxValue;
                     break;
                 case "System.UInt32":
-                    targetSize = 4;
                     maxVal = uint.MaxValue;
                     break;
                 case "System.UInt64":
-                    targetSize = 8;
                     maxVal = ulong.MaxValue;
                     break;
                 case "System.Half":
-                    targetSize = 2;
-                    maxVal = 1;
-                    isFloat = true;
-                    break;
                 case "System.Single":
-                    targetSize = 4;
-                    maxVal = 1;
-                    isFloat = true;
-                    break;
                 case "System.Double":
-                    targetSize = 8;
                     maxVal = 1;
-                    isFloat = true;
                     break;
             }
 
             int size = Marshal.SizeOf(typeof(T));
             bool switchEndian = targetToBeBigEndian != sourceIsBigEndian;
             MethodInfo method = typeof(BitConverter).GetMethod(methodName);
+            MethodInfo getBytes = typeof(BitConverter).GetMethod("GetBytes");
 
             var targetNumChannels = Helpers.GetNumChannels(targetColorSpace);
             var sourceNumChannels = Helpers.GetNumChannels(sourceColorSpace);
 
             object[] sChValues = new object[sourceNumChannels];
+            T[] tChValues = new T[targetNumChannels];
 
+            MemoryStream outValueBytes = new();
             byte[] outputBytes = new byte[sourceData.Length * targetNumChannels * size];
             if (sourceFormat == "System.SByte")
             {
@@ -170,22 +140,35 @@ namespace BNGCORE.FormatConversion
                 {
                     sChValues[0] = Rescale<T>(System.Convert.ToSByte(sourceData[i]));
                     if (convertColorSpace)
-                        ConvertColorSpace(sChValues, outputBytes, i, size, sourceColorSpace, targetColorSpace, isFloat);
+                        outputBytes[i * targetNumChannels] = ConvertColorSpace((dynamic)sChValues, sourceColorSpace, targetColorSpace, maxVal);
                     else
-                        Array.Copy(sChValues, i, outputBytes, i , 1);
+                        outputBytes[i * targetNumChannels] = (byte)sChValues[0];
                 }
             }
             else
             {
                 for (int i = 0; i < sourceData.Length; i++)
                 {
-                    
                     for (int j = 0; j < sourceNumChannels; j++)
                     {
                         if (switchEndian) Array.Reverse(sourceData, (i * sourceNumChannels + j) * size, size);
                         sChValues[j] = Rescale<T>(method.Invoke(null, new object[] { sourceData, (i * sourceNumChannels + j) * size }));
                     }
-                    ConvertColorSpace(sChValues, outputBytes, i * targetNumChannels * targetSize, size, sourceColorSpace, targetColorSpace, isFloat);
+
+                    if (convertColorSpace)
+                    {
+                        tChValues = ConvertColorSpace((dynamic)sChValues, sourceColorSpace, targetColorSpace, maxVal);
+                        for (int j = 0; j < targetNumChannels; j++)
+                        {
+                            byte[] temp = (byte[])getBytes.Invoke(null, new object[] { sChValues[j] });
+                            outValueBytes.Write(temp);
+                        }
+                        Array.Copy(tChValues, i, outputBytes, i * targetNumChannels * size, size);
+                    }
+                    else
+                    {
+                        Array.Copy(sChValues, i, outputBytes, i * targetNumChannels * size, size);
+                    }
                 }
             }
             return outputBytes;
@@ -198,140 +181,256 @@ namespace BNGCORE.FormatConversion
         }
 
 
-        public static T[] ConvertColorSpace<T>(T[] pixelIn, ColorSpace sourceColorSpace, ColorSpace targetColorSpace, bool isFloat, ulong maxValue)
+        public static T[] ConvertColorSpace<T>(T[] pixelIn, ColorSpace sourceColorSpace, ColorSpace targetColorSpace, ulong maxValue)
         {
             T[] outPixel = new T[Helpers.GetNumChannels(targetColorSpace)];
-
-            if (isFloat)
+            switch (targetColorSpace)
             {
-
+                case ColorSpace.GRAY:
+                    {
+                        decimal opacityFrac = 0;
+                        switch (sourceColorSpace)
+                        {
+                            case ColorSpace.GRAYA:
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / (decimal)maxValue));
+                                break;
+                            case ColorSpace.RGB:
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
+                                break;
+                            case ColorSpace.RGBA:
+                                opacityFrac = (dynamic)pixelIn[3] / maxValue;
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
+                                break;
+                            case ColorSpace.YCrCb:
+                                outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
+                                break;
+                            case ColorSpace.YCrCbA:
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
+                                break;
+                            case ColorSpace.CMYK:
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
+                                break;
+                            case ColorSpace.CMYKA:
+                                opacityFrac = (dynamic)pixelIn[4] / maxValue;
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25 * opacityFrac); //CRUDE!
+                                break;
+                        }
+                    }
+                    break;
+                case ColorSpace.GRAYA:
+                    {
+                        switch (sourceColorSpace)
+                        {
+                            case ColorSpace.GRAY:
+                                outPixel[0] = (dynamic)pixelIn[0];
+                                outPixel[1] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.RGB:
+                                outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
+                                outPixel[1] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.RGBA:
+                                outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
+                                outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
+                                break;
+                            case ColorSpace.YCrCb:
+                                outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
+                                outPixel[1] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.YCrCbA:
+                                outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
+                                outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
+                                break;
+                            case ColorSpace.CMYK:
+                                outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
+                                outPixel[1] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.CMYKA:
+                                outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
+                                outPixel[1] = (dynamic)pixelIn[4]; //Copy alpha channel
+                                break;
+                        }
+                    }
+                    break;
+                case ColorSpace.RGB:
+                    {
+                        decimal opacityFrac = 0;
+                        switch (sourceColorSpace)
+                        {
+                            case ColorSpace.GRAY:
+                                outPixel[0] = (dynamic)pixelIn[0];
+                                outPixel[1] = (dynamic)pixelIn[0];
+                                outPixel[2] = (dynamic)pixelIn[0];
+                                break;
+                            case ColorSpace.GRAYA:
+                                opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                outPixel[1] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                outPixel[2] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                break;
+                            case ColorSpace.RGBA:
+                                opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
+                                outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                outPixel[1] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[1] * opacityFrac);
+                                outPixel[2] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[2] * opacityFrac);
+                                break;
+                            case ColorSpace.YCrCb:
+                                throw new Exception("TODO");
+                            case ColorSpace.YCrCbA:
+                                throw new Exception("TODO");
+                                break;
+                            case ColorSpace.CMYK:
+                                outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                                outPixel[1] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[1]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                                outPixel[2] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[2]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                                break;
+                            case ColorSpace.CMYKA:
+                                opacityFrac = (decimal)(dynamic)pixelIn[4] / maxValue;
+                                outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]) * opacityFrac);
+                                outPixel[1] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[1]) * (maxValue - (decimal)(dynamic)pixelIn[3]) * opacityFrac);
+                                outPixel[2] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[2]) * (maxValue - (decimal)(dynamic)pixelIn[3]) * opacityFrac);
+                                break;
+                        }
+                    }
+                    break;
+                case ColorSpace.RGBA:
+                    switch (sourceColorSpace)
+                    {
+                        case ColorSpace.GRAY:
+                            outPixel[0] = (dynamic)pixelIn[0];
+                            outPixel[1] = (dynamic)pixelIn[0];
+                            outPixel[2] = (dynamic)pixelIn[0];
+                            outPixel[3] = (dynamic)maxValue; // Opacity cranked
+                            break;
+                        case ColorSpace.GRAYA:
+                            outPixel[0] = (dynamic)pixelIn[0];
+                            outPixel[1] = (dynamic)pixelIn[0];
+                            outPixel[2] = (dynamic)pixelIn[0];
+                            outPixel[3] = (dynamic)pixelIn[1];
+                            break;
+                        case ColorSpace.RGBA:
+                            outPixel[0] = (dynamic)pixelIn[0];
+                            outPixel[1] = (dynamic)pixelIn[1];
+                            outPixel[2] = (dynamic)pixelIn[2];
+                            outPixel[3] = (dynamic)pixelIn[3];
+                            break;
+                        case ColorSpace.YCrCb:
+                            throw new Exception("TODO");
+                        case ColorSpace.YCrCbA:
+                            throw new Exception("TODO");
+                            break;
+                        case ColorSpace.CMYK:
+                            outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[1] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[1]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[2] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[2]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[3] = (dynamic)maxValue; // Opacity cranked
+                            break;
+                        case ColorSpace.CMYKA:
+                            outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[1] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[1]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[2] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[2]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                            outPixel[3] = (dynamic)pixelIn[4];
+                            break;
+                    }
+                    break;
+                case ColorSpace.YCrCb:
+                    throw new Exception("TODO");
+                case ColorSpace.YCrCbA:
+                    throw new Exception("TODO");
+                case ColorSpace.CMYK:
+                    {
+                        decimal opacityFrac = 0;
+                        switch (sourceColorSpace)
+                        {
+                            case ColorSpace.GRAY:
+                                outPixel[0] = (dynamic)0;
+                                outPixel[1] = (dynamic)0;
+                                outPixel[2] = (dynamic)0;
+                                outPixel[3] = (dynamic)pixelIn[0];
+                                break;
+                            case ColorSpace.GRAYA:
+                                opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
+                                outPixel[0] = (dynamic)0;
+                                outPixel[1] = (dynamic)0;
+                                outPixel[2] = (dynamic)0;
+                                outPixel[3] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                break;
+                            case ColorSpace.RGB:
+                                outPixel[3] = (dynamic)Math.Round(maxValue * Math.Max((decimal)(dynamic)pixelIn[0], Math.Max(Math.Max((decimal)(dynamic)pixelIn[1], (decimal)(dynamic)pixelIn[2]), (decimal)(dynamic)pixelIn[3])));
+                                outPixel[0] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[1] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[1] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[2] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[2] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[3] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                break;
+                            case ColorSpace.RGBA:
+                                opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
+                                T k = (dynamic)Math.Round(maxValue * Math.Max((decimal)(dynamic)pixelIn[0], Math.Max(Math.Max((decimal)(dynamic)pixelIn[1], (decimal)(dynamic)pixelIn[2]), (decimal)(dynamic)pixelIn[3])));
+                                outPixel[3] = (dynamic)Math.Round((decimal)(dynamic)k * opacityFrac);
+                                outPixel[0] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[1] - (decimal)(dynamic)k) / (maxValue - (decimal)(dynamic)k) * opacityFrac);
+                                outPixel[1] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[2] - (decimal)(dynamic)k) / (maxValue - (decimal)(dynamic)k) * opacityFrac);
+                                outPixel[2] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[3] - (decimal)(dynamic)k) / (maxValue - (decimal)(dynamic)k) * opacityFrac);
+                                break;
+                            case ColorSpace.YCrCb:
+                                throw new Exception("TODO");
+                            case ColorSpace.YCrCbA:
+                                throw new Exception("TODO");
+                            case ColorSpace.CMYKA:
+                                outPixel[0] = (dynamic)pixelIn[0];
+                                outPixel[1] = (dynamic)pixelIn[1];
+                                outPixel[2] = (dynamic)pixelIn[2];
+                                outPixel[3] = (dynamic)pixelIn[3];
+                                outPixel[4] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                        }
+                    }
+                    break;
+                case ColorSpace.CMYKA:
+                    {
+                        decimal opacityFrac = 0;
+                        switch (sourceColorSpace)
+                        {
+                            case ColorSpace.GRAY:
+                                outPixel[0] = (dynamic)0;
+                                outPixel[1] = (dynamic)0;
+                                outPixel[2] = (dynamic)0;
+                                outPixel[3] = (dynamic)pixelIn[0];
+                                outPixel[4] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.GRAYA:
+                                outPixel[0] = (dynamic)0;
+                                outPixel[1] = (dynamic)0;
+                                outPixel[2] = (dynamic)0;
+                                outPixel[3] = (dynamic)pixelIn[0];
+                                outPixel[4] = (dynamic)pixelIn[1];
+                                break;
+                            case ColorSpace.RGB:
+                                outPixel[3] = (dynamic)Math.Round(maxValue * Math.Max((decimal)(dynamic)pixelIn[0], Math.Max(Math.Max((decimal)(dynamic)pixelIn[1], (decimal)(dynamic)pixelIn[2]), (decimal)(dynamic)pixelIn[3])));
+                                outPixel[0] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[1] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[1] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[2] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[2] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[3] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[4] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                            case ColorSpace.RGBA:
+                                outPixel[3] = (dynamic)Math.Round(maxValue * Math.Max((decimal)(dynamic)pixelIn[0], Math.Max(Math.Max((decimal)(dynamic)pixelIn[1], (decimal)(dynamic)pixelIn[2]), (decimal)(dynamic)pixelIn[3])));
+                                outPixel[0] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[1] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[1] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[2] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[2] = (dynamic)Math.Round((maxValue - (decimal)(dynamic)pixelIn[3] - (decimal)(dynamic)outPixel[3]) / (maxValue - (decimal)(dynamic)outPixel[3]));
+                                outPixel[4] = (dynamic)pixelIn[3];
+                                break;
+                            case ColorSpace.YCrCb:
+                                throw new Exception("TODO");
+                            case ColorSpace.YCrCbA:
+                                throw new Exception("TODO");
+                            case ColorSpace.CMYKA:
+                                outPixel[0] = (dynamic)pixelIn[0];
+                                outPixel[1] = (dynamic)pixelIn[1];
+                                outPixel[2] = (dynamic)pixelIn[2];
+                                outPixel[3] = (dynamic)pixelIn[3];
+                                outPixel[4] = (dynamic)maxValue; // Opacity cranked
+                                break;
+                        }
+                    }
+                    break;
             }
-            else
-            {
-                switch (targetColorSpace)
-                {
-                    case ColorSpace.GRAY:
-                        {
-                            decimal opacityFrac = 0;
-                            switch (sourceColorSpace)
-                            {
-                                case ColorSpace.GRAYA:
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / (decimal)maxValue));
-                                    break;
-                                case ColorSpace.RGB:
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
-                                    break;
-                                case ColorSpace.RGBA:
-                                    opacityFrac = (dynamic)pixelIn[3] / maxValue;
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
-                                    break;
-                                case ColorSpace.YCrCb:
-                                    outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
-                                    break;
-                                case ColorSpace.YCrCbA:
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
-                                    break;
-                                case ColorSpace.CMYK:
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
-                                    break;
-                                case ColorSpace.CMYKA:
-                                    opacityFrac = (dynamic)pixelIn[4] / maxValue;
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25 * opacityFrac); //CRUDE!
-                                    break;
-                            }
-                        }
-                        break;
-                    case ColorSpace.GRAYA:
-                        {
-                            switch (sourceColorSpace)
-                            {
-                                case ColorSpace.GRAY:
-                                    outPixel[0] = (dynamic)pixelIn[0];
-                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.RGB:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
-                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.RGBA:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
-                                    outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
-                                    break;
-                                case ColorSpace.YCrCb:
-                                    outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
-                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.YCrCbA:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
-                                    outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
-                                    break;
-                                case ColorSpace.CMYK:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
-                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.CMYKA:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
-                                    outPixel[1] = (dynamic)pixelIn[4]; //Copy alpha channel
-                                    break;
-                            }
-                        }
-                        break;
-                    case ColorSpace.RGB:
-                        {
-                            decimal opacityFrac = 0;
-                            switch (sourceColorSpace)
-                            {
-                                case ColorSpace.GRAY:
-                                    outPixel[0] = (dynamic)pixelIn[0];
-                                    outPixel[1] = (dynamic)pixelIn[0];
-                                    outPixel[2] = (dynamic)pixelIn[0];
-                                    break;
-                                case ColorSpace.GRAYA:
-                                    opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
-                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
-                                    outPixel[1] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
-                                    outPixel[2] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
-                                    break;
-                                case ColorSpace.RGBA:
-                                    outPixel[0] = (dynamic)pixelIn[0];
-                                    outPixel[1] = (dynamic)pixelIn[1];
-                                    outPixel[2] = (dynamic)pixelIn[2];
-                                    outPixel[3] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.YCrCb:
-                                    throw new Exception("TODO");
-                                case ColorSpace.YCrCbA:
-                                    throw new Exception("TODO");
-                                    break;
-                                case ColorSpace.CMYK:
-                                    outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
-                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
-                                    break;
-                                case ColorSpace.CMYKA:
-                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (dynamic).25 + (dynamic)pixelIn[1] * (dynamic).25 + (dynamic)pixelIn[2] * (dynamic).25 + (dynamic)pixelIn[3] * (dynamic).25 * ); //CRUDE!
-                                    outPixel[1] = (dynamic)pixelIn[4]; //Copy alpha channel
-                                    break;
-                            }
-                        }
-                        break;
-                    case ColorSpace.RGBA:
-
-                        break;
-                    case ColorSpace.YCrCb:
-
-                        break;
-                    case ColorSpace.YCrCbA:
-
-                        break;
-                    case ColorSpace.CMYK:
-
-                        break;
-                    case ColorSpace.CMYKA:
-
-                        break;
-                }
-            }
-
             throw new NotImplementedException();
         }
 
