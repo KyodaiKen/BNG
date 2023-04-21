@@ -114,8 +114,6 @@ namespace BNGCORE
         public uint OffsetY { get; set; } = 0;
         public uint Width { get; set; } = 0;
         public uint Height { get; set; } = 0;
-        public double ScaleX { get; set; } = 1.0f;
-        public double ScaleY { get; set; } = 1.0f;
         public List<DataBlock>? ExtraData { get; set; }
         public ulong[,] TileDataLengths { get; set; }
         public (uint w, uint h) BaseTileDimension { get; set; }
@@ -144,6 +142,8 @@ namespace BNGCORE
         public float TileSizeFactor { get; set; } = 1;
         [MemoryPackIgnore]
         public float MaxRepackMemoryPercentage { get; set; }
+        [MemoryPackIgnore]
+        public int BytesPerPixel { get; set; }
 
         public string Name { get; set; }
         public string Description { get; set; }
@@ -183,7 +183,6 @@ namespace BNGCORE
         public uint FrameHeight { get; set; }
         public double FrameDuration { get; set; } = 1 / 15;
         public (uint x, uint y) LayerOffset { get; set; } = (0, 0);
-        public (double x, double y) LayerScale { get; set; } = (1.0f, 1.0f);
         public double LayerOpacity { get; set; } = 1.0;
         public LayerBlendMode LayerBlendMode { get; set; } = LayerBlendMode.Normal;
         public Flags Flags { get; set; } = 0;
@@ -344,6 +343,8 @@ namespace BNGCORE
                 log.AppendLine(string.Format("'-Channel data format: {0}", Frame.CompositingPixelFormat.ToString()));
             }
 
+            Frame.BytesPerPixel = CalculateBitsPerPixel(Frame.CompositingColorSpace, Frame.CompositingBitsPerChannel) / 8;
+
             ulong layerDataOffset = 0;
             Frame.LayerDataOffsets = new ulong[Frame.Layers.Count];
 
@@ -360,8 +361,6 @@ namespace BNGCORE
                     log.AppendLine(string.Format("Offset Y.............: {0}", Frame.Layers[layer].OffsetY));
                     log.AppendLine(string.Format("Width................: {0}", Frame.Layers[layer].Width));
                     log.AppendLine(string.Format("Height...............: {0}", Frame.Layers[layer].Height));
-                    log.AppendLine(string.Format("Scale X..............: {0}", Frame.Layers[layer].ScaleX));
-                    log.AppendLine(string.Format("Scale Y..............: {0}", Frame.Layers[layer].ScaleY));
                     log.AppendLine(string.Format("Opacity..............: {0}", Frame.Layers[layer].Opacity));
                     log.AppendLine(string.Format("Blend mode...........: {0}", Frame.Layers[layer].BlendMode));
                     log.AppendLine(string.Format("Pixel format.........: {0}", Frame.Layers[layer].ColorSpace.ToString()));
@@ -629,7 +628,7 @@ namespace BNGCORE
                 case CompressionPreFilter.Average:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                     {
-                        unfilteredLine[col] = Average.UnFilter(in lineBuff, in prevLineBuff, col, bytesPerPixel);
+                        unfilteredLine[col] = Average.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
                 default:
@@ -669,27 +668,7 @@ namespace BNGCORE
         #region Helpers
         private int CalculateBitsPerPixel(ColorSpace pixelFormat, uint bitsPerChannel)
         {
-            return GetNumChannels(pixelFormat) * (int)bitsPerChannel;
-        }
-
-        private int GetNumChannels(ColorSpace pixelFormat)
-        {
-            switch (pixelFormat)
-            {
-                case ColorSpace.GRAY:
-                    return 1;
-                case ColorSpace.GRAYA:
-                    return 2;
-                case ColorSpace.RGB:
-                case ColorSpace.YCrCb:
-                    return 3;
-                case ColorSpace.RGBA:
-                case ColorSpace.CMYK:
-                    return 4;
-                case ColorSpace.CMYKA:
-                    return 5;
-                default: return 1;
-            }
+            return Helpers.GetNumChannels(pixelFormat) * (int)bitsPerChannel;
         }
 
         private (uint w, uint h) CalculateTileDimension(ColorSpace pixelFormat, uint bitsPerChannel, float tileSizeMult)
@@ -1113,13 +1092,13 @@ namespace BNGCORE
             Frame.Description = ImportParameters.FrameDescription;
 
             //Ensure that layer fits inside canvas
-            if ((double)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w * ImportParameters.LayerScale.x) > Frame.Width)
+            if ((double)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w) > Frame.Width)
             {
-                Frame.Width = (uint)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w * ImportParameters.LayerScale.x);
+                Frame.Width = (uint)(ImportParameters.LayerOffset.x + ImportParameters.SourceDimensions.w);
             }
-            if ((double)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h * ImportParameters.LayerScale.y) > Frame.Height)
+            if ((double)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h) > Frame.Height)
             {
-                Frame.Height = (uint)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h * ImportParameters.LayerScale.x);
+                Frame.Height = (uint)(ImportParameters.LayerOffset.y + ImportParameters.SourceDimensions.h);
             }
 
             var newLayer = new Layer();
@@ -1159,8 +1138,6 @@ namespace BNGCORE
             newLayer.OffsetX = ImportParameters.LayerOffset.x;
             newLayer.OffsetY = ImportParameters.LayerOffset.y;
             newLayer.Opacity = ImportParameters.LayerOpacity;
-            newLayer.ScaleX = ImportParameters.LayerScale.x;
-            newLayer.ScaleY = ImportParameters.LayerScale.y;
             newLayer.BlendMode = ImportParameters.LayerBlendMode;
 
             newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.ColorSpace, newLayer.BitsPerChannel);

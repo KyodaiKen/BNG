@@ -63,7 +63,6 @@ namespace BNGCORE {
 
             using (var process = Process.Start(info)) {
                 output = process.StandardOutput.ReadToEnd();
-                Console.WriteLine(output);
             }
 
             var lines = output.Split("\n");

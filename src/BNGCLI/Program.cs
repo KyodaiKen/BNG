@@ -108,8 +108,6 @@ namespace BNG_CLI {
                 Help.WriteLine("    ldc=   (Default=Empty)            Layer description             Free text");
                 Help.WriteLine("    lox=   (Default=0)                Layer offset X                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    loy=   (Default=0)                Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
-                Help.WriteLine("    lsx=   (Default=1)                Layer scale X                 Decimal number");
-                Help.WriteLine("    lsy=   (Default=1)                Layer scale Y                 Decimal number");
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
@@ -323,20 +321,6 @@ namespace BNG_CLI {
                                             return;
                                         }
                                         break;
-                                    case "lsx":
-                                        if (!double.TryParse(tuple[1], out lsx)) {
-                                            Output.WriteLine("Error: Illegal number for lox. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
-                                            ErrorState = true;
-                                            return;
-                                        }
-                                        break;
-                                    case "lsy":
-                                        if (!double.TryParse(tuple[1], out lsy)) {
-                                            Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
-                                            ErrorState = true;
-                                            return;
-                                        }
-                                        break;
                                     case "lop":
                                         double lop;
                                         if (!double.TryParse(tuple[1], out lop)) {
@@ -446,8 +430,6 @@ namespace BNG_CLI {
                             }
 
                             fileinfo.importParameters.SourceDimensions = (width, height);
-                            fileinfo.importParameters.LayerOffset = (lox, loy);
-                            fileinfo.importParameters.LayerScale = (lsx, lsy);
                             fileinfo.outputDirectory = "";
 
                             InputFiles.Add(fileinfo);
