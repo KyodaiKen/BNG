@@ -82,19 +82,75 @@ namespace BNGCORE.FormatConversion
             if (sourceFormat == typeof(T).ToString() && sourceIsBigEndian == targetToBeBigEndian)
                 throw new ArgumentException("No format change detected");
 
+            bool convertColorSpace = sourceColorSpace != targetColorSpace;
+
             string methodName = "To" + typeof(T).ToString().Split('.')[1]; // System.Half -> ToHalf
             if (methodName == "ToSByte") methodName = "ToChar";
 
-            bool isFloat;
+            bool isFloat = false;
+            int targetSize = 0;
+            ulong maxVal = 0;
             switch (sourceFormat)
             {
                 case "System.Half":
+                    isFloat = true;
+                    break;
                 case "System.Single":
+                    isFloat = true;
+                    break;
                 case "System.Double":
                     isFloat = true;
                     break;
-                default:
-                    isFloat = false;
+            }
+
+            switch (typeof(T).ToString())
+            {
+                case "System.SByte":
+                    targetSize = 1;
+                    maxVal = byte.MaxValue;
+                    break;
+                case "System.Int16":
+                    targetSize = 2;
+                    maxVal = (ulong)short.MaxValue;
+                    break;
+                case "System.Int32":
+                    targetSize = 4;
+                    maxVal = int.MaxValue;
+                    break;
+                case "System.Int64":
+                    targetSize = 8;
+                    maxVal = long.MaxValue;
+                    break;
+                case "System.Byte":
+                    targetSize = 1;
+                    maxVal = (ulong)sbyte.MaxValue;
+                    break;
+                case "System.UInt16":
+                    targetSize = 2;
+                    maxVal = ushort.MaxValue;
+                    break;
+                case "System.UInt32":
+                    targetSize = 4;
+                    maxVal = uint.MaxValue;
+                    break;
+                case "System.UInt64":
+                    targetSize = 8;
+                    maxVal = ulong.MaxValue;
+                    break;
+                case "System.Half":
+                    targetSize = 2;
+                    maxVal = 1;
+                    isFloat = true;
+                    break;
+                case "System.Single":
+                    targetSize = 4;
+                    maxVal = 1;
+                    isFloat = true;
+                    break;
+                case "System.Double":
+                    targetSize = 8;
+                    maxVal = 1;
+                    isFloat = true;
                     break;
             }
 
@@ -107,18 +163,21 @@ namespace BNGCORE.FormatConversion
 
             object[] sChValues = new object[sourceNumChannels];
 
-            byte[] outputBytes = new byte[sourceData.Length * targetNumChannels];
+            byte[] outputBytes = new byte[sourceData.Length * targetNumChannels * size];
             if (sourceFormat == "System.SByte")
             {
-                for (int i = 0; i < sourceData.Length; i ++)
+                for (int i = 0; i < sourceData.Length; i++)
                 {
-                    sChValues[j] = Rescale<T>(System.Convert.ToSByte(sourceData[i]));
-                    ConvertColorSpace(sChValues, outputBytes, i, size, sourceColorSpace, targetColorSpace, isFloat);
+                    sChValues[0] = Rescale<T>(System.Convert.ToSByte(sourceData[i]));
+                    if (convertColorSpace)
+                        ConvertColorSpace(sChValues, outputBytes, i, size, sourceColorSpace, targetColorSpace, isFloat);
+                    else
+                        Array.Copy(sChValues, i, outputBytes, i , 1);
                 }
             }
             else
             {
-                for (int i = 0; i < sourceData.Length; i ++)
+                for (int i = 0; i < sourceData.Length; i++)
                 {
                     
                     for (int j = 0; j < sourceNumChannels; j++)
@@ -126,7 +185,7 @@ namespace BNGCORE.FormatConversion
                         if (switchEndian) Array.Reverse(sourceData, (i * sourceNumChannels + j) * size, size);
                         sChValues[j] = Rescale<T>(method.Invoke(null, new object[] { sourceData, (i * sourceNumChannels + j) * size }));
                     }
-                    ConvertColorSpace(sChValues, outputBytes, i * targetNumChannels, size, sourceColorSpace, targetColorSpace, isFloat);
+                    ConvertColorSpace(sChValues, outputBytes, i * targetNumChannels * targetSize, size, sourceColorSpace, targetColorSpace, isFloat);
                 }
             }
             return outputBytes;
@@ -138,8 +197,11 @@ namespace BNGCORE.FormatConversion
             return (dynamic)inValue / (decimal)maxValue * newMaxValue;
         }
 
-        private static byte[] ConvertColorSpace(object[] inChValues, byte[] outputBytes, int i, int size, ColorSpace sourceColorSpace, ColorSpace targetColorSpace, bool isFloat)
+
+        public static T[] ConvertColorSpace<T>(T[] pixelIn, ColorSpace sourceColorSpace, ColorSpace targetColorSpace, bool isFloat, ulong maxValue)
         {
+            T[] outPixel = new T[Helpers.GetNumChannels(targetColorSpace)];
+
             if (isFloat)
             {
 
@@ -150,31 +212,31 @@ namespace BNGCORE.FormatConversion
                 {
                     case ColorSpace.GRAY:
                         {
-                            var opacityFrac = 0f;
+                            decimal opacityFrac = 0;
                             switch (sourceColorSpace)
                             {
                                 case ColorSpace.GRAYA:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * ((float)inChValues[1] / 256f));
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / (decimal)maxValue));
                                     break;
                                 case ColorSpace.RGB:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .3 + (float)inChValues[1] * .59 + (float)inChValues[2] * .11);
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
                                     break;
                                 case ColorSpace.RGBA:
-                                    opacityFrac = (float)inChValues[3] / 256f;
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .3 + (float)inChValues[1] * .59 + (float)inChValues[2] * .11 * (float)inChValues[3]);
+                                    opacityFrac = (dynamic)pixelIn[3] / maxValue;
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
                                     break;
                                 case ColorSpace.YCrCb:
-                                    outputBytes[i] = (byte)inChValues[0]; // CRUDE! Just return Y
+                                    outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
                                     break;
                                 case ColorSpace.YCrCbA:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * ((float)inChValues[1] / 256f)); // CRUDE! Just return Y
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
                                     break;
                                 case ColorSpace.CMYK:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .25 + (float)inChValues[1] * .25 + (float)inChValues[2] * .25 + (float)inChValues[3] * .25); //CRUDE!
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
                                     break;
                                 case ColorSpace.CMYKA:
-                                    opacityFrac = (float)inChValues[4] / 256f;
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .25 + (float)inChValues[1] * .25 + (float)inChValues[2] * .25 + (float)inChValues[3] * .25 * ); //CRUDE!
+                                    opacityFrac = (dynamic)pixelIn[4] / maxValue;
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25 * opacityFrac); //CRUDE!
                                     break;
                             }
                         }
@@ -184,36 +246,73 @@ namespace BNGCORE.FormatConversion
                             switch (sourceColorSpace)
                             {
                                 case ColorSpace.GRAY:
-                                    outputBytes[i] = (byte)inChValues[0];
-                                    outputBytes[i + 1] = 0xFF; // Opacity cranked
+                                    outPixel[0] = (dynamic)pixelIn[0];
+                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
                                     break;
                                 case ColorSpace.RGB:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .3 + (float)inChValues[1] * .59 + (float)inChValues[2] * .11);
-                                    outputBytes[i + 1] = 0xFF; // Opacity cranked
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11);
+                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
                                     break;
                                 case ColorSpace.RGBA:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .3 + (float)inChValues[1] * .59 + (float)inChValues[2] * .11 * (float)inChValues[3]);
-                                    outputBytes[i + 1] = (byte)inChValues[3]; //Copy alpha channel
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).3 + (dynamic)pixelIn[1] * (decimal).59 + (dynamic)pixelIn[2] * (decimal).11 * (dynamic)pixelIn[3]);
+                                    outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
                                     break;
                                 case ColorSpace.YCrCb:
-                                    outputBytes[i] = (byte)inChValues[0]; // CRUDE! Just return Y
-                                    outputBytes[i + 1] = 0xFF; // Opacity cranked
+                                    outPixel[0] = (dynamic)pixelIn[0]; // CRUDE! Just return Y
+                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
                                     break;
                                 case ColorSpace.YCrCbA:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * ((float)inChValues[1] / 256f)); // CRUDE! Just return Y
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * ((dynamic)pixelIn[1] / maxValue)); // CRUDE! Just return Y
+                                    outPixel[1] = (dynamic)pixelIn[3]; //Copy alpha channel
                                     break;
                                 case ColorSpace.CMYK:
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .25 + (float)inChValues[1] * .25 + (float)inChValues[2] * .25 + (float)inChValues[3] * .25); //CRUDE!
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
+                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
                                     break;
                                 case ColorSpace.CMYKA:
-                                    opacityFrac = (float)inChValues[4] / 256f;
-                                    outputBytes[i] = (byte)Math.Round((float)inChValues[0] * .25 + (float)inChValues[1] * .25 + (float)inChValues[2] * .25 + (float)inChValues[3] * .25 * ); //CRUDE!
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (decimal).25 + (dynamic)pixelIn[1] * (decimal).25 + (dynamic)pixelIn[2] * (decimal).25 + (dynamic)pixelIn[3] * (decimal).25); //CRUDE!
+                                    outPixel[1] = (dynamic)pixelIn[4]; //Copy alpha channel
                                     break;
                             }
                         }
                         break;
                     case ColorSpace.RGB:
-
+                        {
+                            decimal opacityFrac = 0;
+                            switch (sourceColorSpace)
+                            {
+                                case ColorSpace.GRAY:
+                                    outPixel[0] = (dynamic)pixelIn[0];
+                                    outPixel[1] = (dynamic)pixelIn[0];
+                                    outPixel[2] = (dynamic)pixelIn[0];
+                                    break;
+                                case ColorSpace.GRAYA:
+                                    opacityFrac = (decimal)(dynamic)pixelIn[1] / maxValue;
+                                    outPixel[0] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                    outPixel[1] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                    outPixel[2] = (dynamic)Math.Round((decimal)(dynamic)pixelIn[0] * opacityFrac);
+                                    break;
+                                case ColorSpace.RGBA:
+                                    outPixel[0] = (dynamic)pixelIn[0];
+                                    outPixel[1] = (dynamic)pixelIn[1];
+                                    outPixel[2] = (dynamic)pixelIn[2];
+                                    outPixel[3] = (dynamic)maxValue; // Opacity cranked
+                                    break;
+                                case ColorSpace.YCrCb:
+                                    throw new Exception("TODO");
+                                case ColorSpace.YCrCbA:
+                                    throw new Exception("TODO");
+                                    break;
+                                case ColorSpace.CMYK:
+                                    outPixel[0] = (dynamic)Math.Round(maxValue * (maxValue - (decimal)(dynamic)pixelIn[0]) * (maxValue - (decimal)(dynamic)pixelIn[3]));
+                                    outPixel[1] = (dynamic)maxValue; // Opacity cranked
+                                    break;
+                                case ColorSpace.CMYKA:
+                                    outPixel[0] = (dynamic)Math.Round((dynamic)pixelIn[0] * (dynamic).25 + (dynamic)pixelIn[1] * (dynamic).25 + (dynamic)pixelIn[2] * (dynamic).25 + (dynamic)pixelIn[3] * (dynamic).25 * ); //CRUDE!
+                                    outPixel[1] = (dynamic)pixelIn[4]; //Copy alpha channel
+                                    break;
+                            }
+                        }
                         break;
                     case ColorSpace.RGBA:
 
