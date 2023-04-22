@@ -114,7 +114,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
 
                 Help.WriteLine("\n  Compression and file layout\n");
-                Help.WriteLine("    flt=   (Default=Paeth)            Compression pre-filter        { Sub, Up, Average, Paeth }");
+                Help.WriteLine("    flt=   (Default=Average)            Compression pre-filter        { Sub, Up, Average, Median, Paeth }");
                 Help.WriteLine("    compr= (Default=LZW)              Compression algorithm         { Brotli, LZW, ZSTD }");
                 Help.WriteLine("    level= (Default=N/A)              Compression level             Brotli: 0...11, ZSTD: 1 ... 22, LZW: N/A");
                 Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            1...24");
@@ -134,7 +134,9 @@ namespace BNG_CLI {
                             fileinfo.importParameters.Flags = Flags.COMPRESSED_HEADER;
                             string[] options = Split(input, ',');
                             foreach (string option in options) {
-                                string[] tuple = Split(option, '=');
+                                string[] tuple = new string[2];
+                                tuple[0] = option.Substring(0, option.IndexOf('='));
+                                tuple[1] = option.Substring(option.IndexOf('=') + 1);
                                 switch (tuple[0]) {
                                     case "fn":
                                         fileinfo.pathName = tuple[1];

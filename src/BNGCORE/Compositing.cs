@@ -11,6 +11,7 @@ namespace BNGCORE.Compositing
     {
         public static void Compose(in FrameHeader frame, in List<Layer> layerInfo, in List<byte[]> tileLayers, out byte[] compoundTile)
         {
+            compoundTile = new byte[layerInfo.Count];
             for (int l = 0; l < tileLayers.Count; l++)
             {
                 compoundTile = new byte[frame.Width * frame.BytesPerPixel * frame.Height];

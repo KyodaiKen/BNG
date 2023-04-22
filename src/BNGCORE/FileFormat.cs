@@ -35,6 +35,7 @@ namespace BNGCORE
         Sub = 0x10,
         Up = 0x20,
         Average = 0x30,
+        Median = 0x31,
         Paeth = 0x40,
         All = 0xFF
     }
@@ -167,7 +168,7 @@ namespace BNGCORE
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Paeth;
+        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Average;
         public Compression Compression { get; set; } = Compression.LZW;
         public int CompressionLevel { get; set; } = 6;
         public int BrotliWindowSize { get; set; } = 0;
@@ -631,9 +632,14 @@ namespace BNGCORE
                         unfilteredLine[col] = Average.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
-                default:
-                    lineBuff.CopyTo(unfilteredLine, 0);
+                case CompressionPreFilter.Median:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                    {
+                        unfilteredLine[col] = Median.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
+                    }
                     break;
+                default:
+                    return lineBuff;
             }
             return unfilteredLine;
         }
@@ -1014,7 +1020,15 @@ namespace BNGCORE
                     break;
                 case CompressionPreFilter.Average:
                     for (long col = 0; col < lineBuff.LongLength; col++)
+                    {
                         filtered[col] = Average.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
+                    }
+                    break;
+                case CompressionPreFilter.Median:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                    {
+                        filtered[col] = Median.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
+                    }
                     break;
                 default:
                     Array.Copy(lineBuff, 0, filtered, 0, filtered.LongLength);
