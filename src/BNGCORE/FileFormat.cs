@@ -36,6 +36,7 @@ namespace BNGCORE
         Up = 0x20,
         Average = 0x30,
         Median = 0x31,
+        Median2 = 0x32,
         Paeth = 0x40,
         All = 0xFF
     }
@@ -638,6 +639,12 @@ namespace BNGCORE
                         unfilteredLine[col] = Median.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
+                case CompressionPreFilter.Median2:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                    {
+                        unfilteredLine[col] = Median2.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
+                    }
+                    break;
                 default:
                     return lineBuff;
             }
@@ -1029,6 +1036,10 @@ namespace BNGCORE
                     {
                         filtered[col] = Median.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     }
+                    break;
+                case CompressionPreFilter.Median2:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                        filtered[col] = Median2.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     break;
                 default:
                     Array.Copy(lineBuff, 0, filtered, 0, filtered.LongLength);

@@ -49,6 +49,22 @@ namespace BNGCORE.Filters {
         }
     }
 
+    public static class Median2
+    {
+        public static byte Filter(in byte[] cLine, in byte[] pLine, long col, int BytesPerPixel)
+        {
+            return (byte)(cLine[col] - Predictor((col - BytesPerPixel < 0) ? 0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? 0 : pLine[col - BytesPerPixel]));
+        }
+        public static byte UnFilter(in byte[] cLine, in byte[] dLine, in byte[] pLine, long col, int BytesPerPixel)
+        {
+            return (byte)(cLine[col] + Predictor((col - BytesPerPixel < 0) ? 0 : dLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? 0 : pLine[col - BytesPerPixel]));
+        }
+        private static int Predictor(int left, int above, int upperLeft)
+        {
+            return Helpers.Median(new List<int> { left, above, upperLeft });
+        }
+    }
+
     public static class Paeth {
         public static byte Filter(in byte[] cLine, in byte[] pLine, long col, int BytesPerPixel) {
             return (byte)(cLine[col] - Predictor((col - BytesPerPixel < 0) ? 0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? 0 : pLine[col - BytesPerPixel]));
