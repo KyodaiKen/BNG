@@ -112,12 +112,16 @@ namespace BNG_CLI {
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
+                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Custom, Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
+                Help.WriteLine("    flt=   (Default=Average)          Dot (.) separated list of compression pre-filters to try\n" +
+                               "                                        Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
+                Help.WriteLine("    compr= (Default=LZW)              Dot (.) separated list of compression algorithms to try\n" +
+                               "                                        Possible values:              { None, Brotli, LZW, ZSTD }");
+                Help.WriteLine("    clvlb= (Default=N/A)              Brotli ompression level       1 ... 11");
+                Help.WriteLine("    clvlz= (Default=N/A)              ZSTD Compression level        1 ... 22");
+                Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            10 ... 24");
 
-                Help.WriteLine("\n  Compression and file layout\n");
-                Help.WriteLine("    flt=   (Default=Average)          Compression pre-filter        { Sub, Up, Average, Median, Median2, Paeth }");
-                Help.WriteLine("    compr= (Default=LZW)              Compression algorithm         { Brotli, LZW, ZSTD }");
-                Help.WriteLine("    level= (Default=N/A)              Compression level             Brotli: 0...11, ZSTD: 1 ... 22, LZW: N/A");
-                Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            1...24");
+                Help.WriteLine("\n  File layout\n");
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
                                "                                                                    If more is needed than set here, a temporary file in the\n"+
                                "                                                                    destination path is used instead.");
@@ -356,48 +360,87 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.LayerClosesFrame = lcf == 1;
                                         break;
-                                    case "flt":
-                                        AssignEnum(typeof(CompressionPreFilter), tuple[1], FLTNotFound, FLTFound);
-                                        void FLTFound(object enumVal) {
-                                            fileinfo.importParameters.CompressionPreFilter = (CompressionPreFilter)enumVal;
+                                    case "preset":
+                                        AssignEnum(typeof(CompressionPresets), tuple[1], PresetNotFound, PresetFound);
+                                        void PresetFound(object enumVal)
+                                        {
+                                            fileinfo.importParameters.CompressionPreset = (CompressionPresets)enumVal;
                                         }
-                                        void FLTNotFound() {
+                                        void PresetNotFound()
+                                        {
                                             Output.WriteLine("Error: Value for flt is invalid!");
                                             ErrorState = true;
+                                        }
+                                        break;
+                                    case "flt":
+                                        var listFltrs = tuple[1].Split('.');
+                                        List<CompressionPreFilter> filters = new List<CompressionPreFilter>();
+                                        foreach (var fltr in listFltrs)
+                                        {
+                                            
+                                            AssignEnum(typeof(CompressionPreFilter), fltr, FLTNotFound, FLTFound);
+                                            void FLTFound(object enumVal)
+                                            {
+                                                filters.Add((CompressionPreFilter)enumVal);
+                                            }
+                                            void FLTNotFound()
+                                            {
+                                                Output.WriteLine("Error: Value for flt is invalid!");
+                                                ErrorState = true;
+                                            }
+                                        }
+                                        
+                                        if(filters.Count == 0)
+                                        {
+                                            Output.WriteLine("Error: Value for flt is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        else
+                                        {
+                                            fileinfo.importParameters.CompressionPreFilters = filters;
                                         }
                                         break;
                                     case "compr":
-                                        AssignEnum(typeof(Compression), tuple[1], ComprNotFound, ComprFound);
-                                        void ComprFound(object enumVal) {
-                                            fileinfo.importParameters.Compression = (Compression)enumVal;
+                                        var listCompr = tuple[1].Split('.');
+                                        List<Compression> comprs = new List<Compression>();
+                                        foreach (string compr in listCompr)
+                                        {
+
+                                            AssignEnum(typeof(Compression), compr, COMPRNotFound, COMPRFound);
+                                            void COMPRFound(object enumVal)
+                                            {
+                                                comprs.Add((Compression)enumVal);
+                                            }
+                                            void COMPRNotFound()
+                                            {
+                                                Output.WriteLine("Error: Value for flt is invalid!");
+                                                ErrorState = true;
+                                            }
                                         }
-                                        void ComprNotFound() {
+
+                                        if (comprs.Count == 0)
+                                        {
                                             Output.WriteLine("Error: Value for flt is invalid!");
                                             ErrorState = true;
                                         }
+                                        else
+                                        {
+                                            fileinfo.importParameters.Compressions = comprs;
+                                        }
                                         break;
-                                    case "level":
-                                        int comprLevel;
-                                        if (!int.TryParse(tuple[1], out comprLevel)) {
+                                    case "clvlb":
+                                        int comprLevelBrotli;
+                                        if (!int.TryParse(tuple[1], out comprLevelBrotli)) {
                                             Output.WriteLine("Error: Illegal number for level. Please enter an integer number depending on the compression algorithm.");
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (fileinfo.importParameters.Compression == Compression.Brotli) {
-                                            if (comprLevel < 0 || comprLevel > 11) {
-                                                Output.WriteLine("Error: Illegal number for Brotli level. Please enter an integer number between 0 and 11");
-                                                ErrorState = true;
-                                                return;
-                                            }
+                                        if (comprLevelBrotli < 0 || comprLevelBrotli > 11) {
+                                            Output.WriteLine("Error: Illegal number for Brotli level. Please enter an integer number between 0 and 11");
+                                            ErrorState = true;
+                                            return;
                                         }
-                                        else if (fileinfo.importParameters.Compression == Compression.ZSTD) {
-                                            if (comprLevel < 0 || comprLevel > 22) {
-                                                Output.WriteLine("Error: Illegal number for ZSTD level. Please enter an integer number between 0 and 22");
-                                                ErrorState = true;
-                                                return;
-                                            }
-                                        }
-                                        fileinfo.importParameters.CompressionLevel = comprLevel;
+                                        fileinfo.importParameters.CompressionLevel.Brotli = comprLevelBrotli;
                                         break;
                                     case "bwnd":
                                         int bwnd;
@@ -412,6 +455,22 @@ namespace BNG_CLI {
                                             return;
                                         }
                                         fileinfo.importParameters.BrotliWindowSize = bwnd;
+                                        break;
+                                    case "clvlz":
+                                        int comprLevelZSTD;
+                                        if (!int.TryParse(tuple[1], out comprLevelZSTD))
+                                        {
+                                            Output.WriteLine("Error: Illegal number for level. Please enter an integer number depending on the compression algorithm.");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (comprLevelZSTD < 0 || comprLevelZSTD > 22)
+                                        {
+                                            Output.WriteLine("Error: Illegal number for ZSTD level. Please enter an integer number between 0 and 22");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.CompressionLevel.ZSTD = comprLevelZSTD;
                                         break;
                                     case "ensop":
                                         float ensop;

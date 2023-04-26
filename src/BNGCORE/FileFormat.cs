@@ -29,6 +29,18 @@ namespace BNGCORE
         Subtract = 0x03
     }
 
+    public enum CompressionPresets : byte
+    {
+        Custom = 0,     //Single compression and filter user defined
+        Normal = 1,     //Brotli level 8 with Average filter only
+        Medium = 2,     //Try Average and Paeth in combination with Brotli level 8
+        High = 3,       //Try all filters in combination with Brotli level 8
+        Ultra = 4,      //Try all filters in combination with Brotli level 10
+        Slow = 5,       //Try all filters in combination with Brotli level 11
+        Slower = 6,     //Try all filters and Brotli and ZSTD with their highest levels only
+        Placebo = 7     //Try all filters and Brotli, ZSTD and LZW, with their highest levels only
+    }
+
     public enum CompressionPreFilter : byte
     {
         None = 0x00,
@@ -41,13 +53,12 @@ namespace BNGCORE
         All = 0xFF
     }
 
-    [Flags]
     public enum Compression : byte
     {
         None = 0,
-        Brotli = 8,
-        ZSTD = 16,
-        LZW = 32
+        Brotli = 1,
+        ZSTD = 2,
+        LZW = 3
     }
 
     public enum ColorSpace : byte
@@ -105,20 +116,21 @@ namespace BNGCORE
 
         public string Name { get; set; } = "layer";
         public string Description { get; set; } = string.Empty;
+        public uint Width { get; set; } = 0;
+        public uint Height { get; set; } = 0;
         public ColorSpace ColorSpace { get; set; } = ColorSpace.RGB;
         public uint BitsPerChannel { get; set; } = 8;
         public PixelFormat PixelFormat { get; set; } = PixelFormat.IntegerUnsigned;
-        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.None;
-        public Compression Compression { get; set; } = Compression.Brotli;
+        public (uint w, uint h) BaseTileDimension { get; set; }
         public LayerBlendMode BlendMode { get; set; } = LayerBlendMode.Normal;
         public double Opacity { get; set; } = 1.0;
         public uint OffsetX { get; set; } = 0;
         public uint OffsetY { get; set; } = 0;
-        public uint Width { get; set; } = 0;
-        public uint Height { get; set; } = 0;
+
         public List<DataBlock>? ExtraData { get; set; }
+        public CompressionPreFilter[,] CompressionPreFilterIndex { get; set; }
+        public Compression[,] CompressionIndex { get; set; }
         public ulong[,] TileDataLengths { get; set; }
-        public (uint w, uint h) BaseTileDimension { get; set; }
     }
 
     [MemoryPackable]
@@ -163,15 +175,22 @@ namespace BNGCORE
     }
 
 
+    public class CompressionLevel
+    {
+        public int Brotli { get; set; }
+        public int ZSTD { get; set; }
+    }
+
     public partial class ImportParameters
     {
         public Stream? DataStream { get; set; }
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public CompressionPreFilter CompressionPreFilter { get; set; } = CompressionPreFilter.Average;
-        public Compression Compression { get; set; } = Compression.LZW;
-        public int CompressionLevel { get; set; } = 6;
+        public CompressionPresets CompressionPreset { get; set; } = CompressionPresets.Medium;
+        public List<CompressionPreFilter> CompressionPreFilters { get; set; }
+        public List<Compression> Compressions { get; set; }
+        public CompressionLevel CompressionLevel { get; set; }
         public int BrotliWindowSize { get; set; } = 0;
         public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
         public string LayerName { get; set; } = string.Empty;
@@ -211,6 +230,7 @@ namespace BNGCORE
     public class Bitmap : IDisposable
     {
         private FrameHeader Frame;
+        private RAWImportParameters ImportParameters; 
         private bool disposedValue;
 
         public bool Strict { get; set; } = false;
@@ -368,8 +388,6 @@ namespace BNGCORE
                     log.AppendLine(string.Format("Pixel format.........: {0}", Frame.Layers[layer].ColorSpace.ToString()));
                     log.AppendLine(string.Format("Bits per channel.....: {0}", Frame.Layers[layer].BitsPerChannel));
                     log.AppendLine(string.Format("Channel data format..: {0}", Frame.Layers[layer].PixelFormat.ToString()));
-                    log.AppendLine(string.Format("Compression..........: {0}", Frame.Layers[layer].Compression.ToString()));
-                    log.AppendLine(string.Format("Pre-filter...........: {0}", Frame.Layers[layer].CompressionPreFilter.ToString()));
                     log.AppendLine(string.Format("Base tile dimension W: {0}", Frame.Layers[layer].BaseTileDimension.w));
                     log.AppendLine(string.Format("Base tile dimension H: {0}", Frame.Layers[layer].BaseTileDimension.h));
                     log.AppendLine(string.Format("Data offset..........: {0}", Frame.LayerDataOffsets[layer]));
@@ -413,6 +431,8 @@ namespace BNGCORE
                         {
                             log.AppendLine(string.Format("Actual tile dim. W...: {0}", corrTileSize.w));
                             log.AppendLine(string.Format("Actual tile dim. H...: {0}", corrTileSize.h));
+                            log.AppendLine(string.Format("Pre-filter...........: {0}", Frame.Layers[layer].CompressionPreFilterIndex[(int)tileX, (int)tileY].ToString()));
+                            log.AppendLine(string.Format("Compression..........: {0}", Frame.Layers[layer].CompressionIndex[(int)tileX, (int)tileY].ToString()));
                             log.AppendLine(string.Format("Data size (bytes)....: {0}", tleSzPacked));
                             log.AppendLine(string.Format("Uncompressed size (\"): {0}", tleWzUnPacked));
                         }
@@ -559,7 +579,7 @@ namespace BNGCORE
 
             inStream.Seek((long)layer.TileDataOffsets[tileIndex.x, tileIndex.y] + (long)Frame.LayerDataOffsets[layer.id] + (long)Frame.DataStartOffset, SeekOrigin.Begin);
             inStream.Read(compressedTileBuffer);
-            DeCompress(layer.Compression, compressedTileBuffer, ref tileBuffer);
+            DeCompress(layer.CompressionIndex[(int)tileIndex.x, (int)tileIndex.y], compressedTileBuffer, ref tileBuffer);
 
             var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
             var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
@@ -571,7 +591,7 @@ namespace BNGCORE
             for (uint r = 0; r < tileRows; r++)
             {
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
-                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, in row, ref prevRow);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilterIndex[(int)tileIndex.x, (int)tileIndex.y], tileRowRawLength, bytesPerPixel, in row, ref prevRow);
                 outStream.Seek(layer.BaseTileDimension.h * tileIndex.y * stride + r * stride + layer.BaseTileDimension.w * tileIndex.x * bytesPerPixel, SeekOrigin.Begin);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
@@ -585,7 +605,7 @@ namespace BNGCORE
             //Read and decompress tile
             byte[] tileBuffer = new byte[layer.TileDimensions[tileIndex.x, tileIndex.y].w * layer.TileDimensions[tileIndex.x, tileIndex.y].h * bytesPerPixel];
 
-            DeCompress(layer.Compression, dataIn, ref tileBuffer);
+            DeCompress(layer.CompressionIndex[(int)tileIndex.x, (int)tileIndex.y], dataIn, ref tileBuffer);
 
             var tileRows = layer.TileDimensions[tileIndex.x, tileIndex.y].h;
             var tileRowRawLength = (int)layer.TileDimensions[tileIndex.x, tileIndex.y].w * bytesPerPixel;
@@ -596,7 +616,7 @@ namespace BNGCORE
             for (uint r = 0; r < tileRows; r++)
             {
                 Array.Copy(tileBuffer, row.Length * r, row, 0, row.Length);
-                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilter, tileRowRawLength, bytesPerPixel, in row, ref prevRow);
+                prevRow = DecodeFilter4TileScanline(layer.CompressionPreFilterIndex[(int)tileIndex.x, (int)tileIndex.y], tileRowRawLength, bytesPerPixel, in row, ref prevRow);
                 outStream.Write(prevRow);
                 bytesWritten += prevRow.LongLength;
             }
@@ -699,16 +719,80 @@ namespace BNGCORE
         #endregion
 
         #region Writing
-        public Bitmap(string ImportFileName, ImportParameters Options, ref Stream? dataStream)
+        public Bitmap(string ImportFileName, RAWImportParameters Options, ref Stream? dataStream)
         {
             Frame = new FrameHeader();
+            ImportParameters = Options;
             AddLayer(ImportFileName, Options, ref dataStream);
         }
 
-        public void AddLayer(string ImportFileName, ImportParameters Options, ref Stream? dataStream)
+        public void SetParametersFromPreset(ref RAWImportParameters options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            if (options.CompressionPreset == CompressionPresets.Custom)
+            {
+                if (options.CompressionPreFilters == null) throw new ArgumentNullException("CompressionPreFilters");
+                if (options.Compressions == null) throw new ArgumentNullException("Compressions");
+                if (options.CompressionPreFilters.Count == 0) throw new ArgumentException("At least one Compression Pre Filter has to be specified, even if you choose \"None\"!");
+                if (options.Compressions.Count == 0) throw new ArgumentException("At least one Compression Algorithm has to be specified, even if you choose \"None\"!");
+            }
+            else
+            {
+                options.CompressionPreFilters ??= new();
+                options.Compressions ??= new();
+                options.CompressionPreFilters.Clear();
+                options.Compressions.Clear();
+
+                var AllFilters = new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Median, CompressionPreFilter.Median2, CompressionPreFilter.Paeth };
+                var BestFilters = new List<CompressionPreFilter>() { CompressionPreFilter.Average, CompressionPreFilter.Paeth };
+
+                switch (options.CompressionPreset)
+                {
+                    case CompressionPresets.Normal:
+                        options.CompressionPreFilters.Add(CompressionPreFilter.Average);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
+                        break;
+                    case CompressionPresets.Medium:
+                        options.CompressionPreFilters.AddRange(BestFilters);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
+                        break;
+                    case CompressionPresets.High:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
+                        break;
+                    case CompressionPresets.Ultra:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
+                        break;
+                    case CompressionPresets.Slow:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
+                        break;
+                    case CompressionPresets.Slower:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.AddRange(new List<Compression>() { Compression.Brotli, Compression.ZSTD });
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11, ZSTD = 22 };
+                        break;
+                    case CompressionPresets.Placebo:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.AddRange(new List<Compression>() { Compression.LZW, Compression.Brotli, Compression.ZSTD });
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11, ZSTD = 22 };
+                        break;
+                }
+            }
+        }
+
+        public void AddLayer(string ImportFileName, RAWImportParameters Options, ref Stream? dataStream)
         {
             Frame.Layers ??= new();
-            PrepareRAWDataToLayer(ImportFileName, (RAWImportParameters)Options, ref dataStream);
+            ImportParameters ??= Options;
+            SetParametersFromPreset(ref ImportParameters);
+            PrepareRAWDataToLayer(ImportFileName, ref dataStream);
         }
         public void WriteBNGFrame(ref Stream outputStream)
         {
@@ -807,6 +891,7 @@ namespace BNGCORE
 
                 if (1 == 2)
                 {
+                    /*
                     for (uint y = 0; y < numTilesY; y++)
                     {
                         for (uint x = 0; x < numTilesX; x++)
@@ -846,6 +931,7 @@ namespace BNGCORE
                             Frame.DataLength += (ulong)cBuff.LongLength;
                         }
                     }
+                    */
                 }
                 else
                 {
@@ -927,30 +1013,67 @@ namespace BNGCORE
                         byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                         byte[] cBuff = Array.Empty<byte>();
+                        byte[] smallest = Array.Empty<byte>();
 
-                        //Apply the filter
-                        MemoryStream tileBuffer = new();
-                        lock (inputStream)
+                        int numBytesCompressedTile = int.MaxValue;
+
+
+                        foreach (var filter in ImportParameters.CompressionPreFilters)
                         {
-                            for (int line = 0; line < corrTileSize.h; line++)
+                            MemoryStream tileBuffer = new();
+                            lock (inputStream)
                             {
-                                long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
-                                inputStream.Seek(inputOffset, SeekOrigin.Begin);
-                                inputStream.Read(lineBuff);
+                                //Apply the filter
+                                for (int line = 0; line < corrTileSize.h; line++)
+                                {
+                                    long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
+                                    inputStream.Seek(inputOffset, SeekOrigin.Begin);
+                                    inputStream.Read(lineBuff);
 
-                                byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
-                                FilterTileScanline(Frame.Layers[LayerID].CompressionPreFilter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
+                                    byte[] filteredScanline = new byte[corrTileSize.w * BytesPerPixel];
+                                    FilterTileScanline(filter, corrTileSize, in lineBuff, in prevLineBuff, out filteredScanline, BytesPerPixel);
 
-                                tileBuffer.Write(filteredScanline);
-                                Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                    tileBuffer.Write(filteredScanline);
+                                    Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
+                                }
+                            }
+
+                            //Compress tile data
+                            foreach (var compressionAlgorithm in ImportParameters.Compressions)
+                            {
+                                cBuff = Array.Empty<byte>();
+                                int comprLevel = 0;
+                                switch (compressionAlgorithm)
+                                {
+                                    case Compression.Brotli:
+                                        comprLevel = ImportParameters.CompressionLevel.Brotli;
+                                        break;
+                                    case Compression.ZSTD:
+                                        comprLevel = ImportParameters.CompressionLevel.ZSTD;
+                                        break;
+                                }
+
+                                Compress(compressionAlgorithm, comprLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
+
+                                if (cBuff.Length < numBytesCompressedTile)
+                                {
+                                    //Update info
+                                    numBytesCompressedTile = cBuff.Length;
+                                    Frame.Layers[LayerID].CompressionPreFilterIndex[x, y] = filter;
+                                    Frame.Layers[LayerID].CompressionIndex[x, y] = compressionAlgorithm;
+
+                                    //Copy data over
+                                    smallest = new byte[cBuff.Length];
+                                    Array.Copy(cBuff, smallest, cBuff.Length);
+                                }
                             }
                         }
 
-                        //Compress tile data
-                        Compress(Frame.Layers[LayerID].Compression, Frame.Layers[LayerID].CompressionLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
+                        //Free buffer
+                        cBuff = Array.Empty<byte>();
 
                         //Add tile into the buffer
-                        tileOutputBuffer.Add(i, cBuff);
+                        tileOutputBuffer.Add(i, smallest);
                         tilesDone[i] = true;
                         tilesProcessing[i] = false;
                     });
@@ -1085,7 +1208,7 @@ namespace BNGCORE
         /// <returns>The new Layer ID</returns>
         /// <exception cref="NullReferenceException"></exception>
         /// <exception cref="NotImplementedException"></exception>
-        public ulong PrepareRAWDataToLayer(string RAWFileName, RAWImportParameters ImportParameters, ref Stream? dataStream)
+        public ulong PrepareRAWDataToLayer(string RAWFileName, ref Stream? dataStream)
         {
             Frame.Width = ImportParameters.FrameWidth;
             Frame.Height = ImportParameters.FrameHeight;
@@ -1156,10 +1279,7 @@ namespace BNGCORE
             newLayer.ColorSpace = ImportParameters.SourceColorSpace;
             newLayer.BitsPerChannel = ImportParameters.SourceBitsPerChannel;
             newLayer.PixelFormat = ImportParameters.SourcePixelFormat;
-            newLayer.Compression = ImportParameters.Compression;
-            newLayer.CompressionLevel = ImportParameters.CompressionLevel;
             newLayer.BrotliWindowSize = ImportParameters.BrotliWindowSize;
-            newLayer.CompressionPreFilter = ImportParameters.CompressionPreFilter;
             newLayer.OffsetX = ImportParameters.LayerOffset.x;
             newLayer.OffsetY = ImportParameters.LayerOffset.y;
             newLayer.Opacity = ImportParameters.LayerOpacity;

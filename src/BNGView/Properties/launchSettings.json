@@ -2,7 +2,7 @@
   "profiles": {
     "BNGView": {
       "commandName": "Project",
-      "commandLineArgs": "\"D:\\temp\\bng_test\\compressed\\hand.bng\""
+      "commandLineArgs": "\"D:\\temp\\bng_test\\compressed\\short-hair-gpx.bng\""
     }
   }
 }

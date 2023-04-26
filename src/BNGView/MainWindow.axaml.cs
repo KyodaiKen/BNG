@@ -82,7 +82,6 @@ namespace BNGView
 
             var layer = header.Layers[0];
 
-            SixLabors.ImageSharp.Image<Rgba32> slImg;
             byte[] convBitmapBytes;
 
             switch (layer.PixelFormat)
@@ -100,6 +99,7 @@ namespace BNGView
                                         byte[] convBitmapData = new byte[layer.Width * layer.Height * 4];
                                         conv.CopyPixelDataTo(convBitmapData);
                                         conv.Dispose();
+                                        tmp.Dispose();
                                         convBitmapBytes = convBitmapData.ToArray();
                                     }
                                     break;
@@ -110,6 +110,7 @@ namespace BNGView
                                         byte[] convBitmapData = new byte[layer.Width * layer.Height * 4];
                                         conv.CopyPixelDataTo(convBitmapData);
                                         conv.Dispose();
+                                        tmp.Dispose();
                                         convBitmapBytes = convBitmapData.ToArray();
                                     }
                                     break;
@@ -126,6 +127,7 @@ namespace BNGView
                                     byte[] convBitmapData = new byte[layer.Width * layer.Height * 4];
                                     conv.CopyPixelDataTo(convBitmapData);
                                     conv.Dispose();
+                                    tmp.Dispose();
                                     convBitmapBytes = convBitmapData.ToArray();
                                     break;
                                 default:
@@ -150,6 +152,8 @@ namespace BNGView
                     throw new NotSupportedException("Only unsigned integer images are supported");
             }
 
+            bitmapStream.Dispose();
+
             fixed (byte* p = convBitmapBytes)
             {
                 return new Bitmap(Avalonia.Platform.PixelFormat.Rgba8888
@@ -158,7 +162,7 @@ namespace BNGView
                                 , new Avalonia.Vector(96, 96)
                                 , (int)(header.Width * 4));
             }
-            
+
         }
 
         Bitmap LoadOtherImage(string fileName)
@@ -185,8 +189,9 @@ namespace BNGView
             b.FileName = fileName;
 
             if(LoadedBitmaps.Count>0) LoadedBitmaps.Remove(LoadedBitmaps.First());
+
             LoadedBitmaps.Add(b);
-            BitmapImageObject.Source = LoadedBitmaps.First().Bitmap;
+            BitmapImageObject.Source = b.Bitmap;
             activeBitmapID = 0;
 
             BitmapImageObject.Width = LoadedBitmaps[activeBitmapID].Bitmap.PixelSize.Width * _zoomLevel;
