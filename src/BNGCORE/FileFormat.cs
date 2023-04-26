@@ -296,10 +296,17 @@ namespace BNGCORE
                 byte[] binaryHeader = new byte[headerLength]; //This is now the header size
                 InputStream.Read(binaryHeader);
 
-                using (var decompressor = new BrotliDecompressor())
+                if (Frame.Flags.HasFlag(Flags.COMPRESSED_HEADER))
                 {
-                    var decompressedBuffer = decompressor.Decompress(binaryHeader);
-                    Frame = MemoryPackSerializer.Deserialize<FrameHeader>(decompressedBuffer);
+                    using (var decompressor = new BrotliDecompressor())
+                    {
+                        var decompressedBuffer = decompressor.Decompress(binaryHeader);
+                        Frame = MemoryPackSerializer.Deserialize<FrameHeader>(decompressedBuffer);
+                    }
+                }
+                else
+                {
+                    Frame = MemoryPackSerializer.Deserialize<FrameHeader>(binaryHeader);
                 }
 
                 Frame.DataStartOffset = (ulong)InputStream.Position; //Data length is in the header
@@ -766,12 +773,12 @@ namespace BNGCORE
                     case CompressionPresets.Ultra:
                         options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
                         break;
                     case CompressionPresets.Slow:
                         options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
                         break;
                     case CompressionPresets.Slower:
                         options.CompressionPreFilters.AddRange(AllFilters);
@@ -872,6 +879,9 @@ namespace BNGCORE
 
                 Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
                 Frame.Layers[LayerID].TileDimensions = new (uint w, uint h)[numTilesX, numTilesY];
+                Frame.Layers[LayerID].CompressionPreFilterIndex = new CompressionPreFilter[numTilesX, numTilesY];
+                Frame.Layers[LayerID].CompressionIndex = new Compression[numTilesX, numTilesY];
+
 
                 Stream inputStream;
 
@@ -1010,20 +1020,22 @@ namespace BNGCORE
                         var corrTileSize = CalculateTileDimensionForCoordinate((Frame.Layers[LayerID].Width, Frame.Layers[LayerID].Height), tileSize, ((uint)x, (uint)y));
                         Frame.Layers[LayerID].TileDimensions[x, y] = corrTileSize;
 
-                        byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
-                        byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
+
+                        byte[] tileBuffFiltered = new byte[0];
                         byte[] cBuff = Array.Empty<byte>();
                         byte[] smallest = Array.Empty<byte>();
 
-                        int numBytesCompressedTile = int.MaxValue;
 
+                        int numBytesCompressedTile = int.MaxValue;
 
                         foreach (var filter in ImportParameters.CompressionPreFilters)
                         {
-                            MemoryStream tileBuffer = new();
                             lock (inputStream)
                             {
                                 //Apply the filter
+                                MemoryStream tileBuffer = new();
+                                byte[] lineBuff = new byte[corrTileSize.w * BytesPerPixel];
+                                byte[] prevLineBuff = new byte[corrTileSize.w * BytesPerPixel];
                                 for (int line = 0; line < corrTileSize.h; line++)
                                 {
                                     long inputOffset = tileSize.h * y * stride + line * stride + tileSize.w * x * BytesPerPixel;
@@ -1036,6 +1048,7 @@ namespace BNGCORE
                                     tileBuffer.Write(filteredScanline);
                                     Array.Copy(lineBuff, prevLineBuff, lineBuff.LongLength);
                                 }
+                                tileBuffFiltered = tileBuffer.ToArray();
                             }
 
                             //Compress tile data
@@ -1053,7 +1066,7 @@ namespace BNGCORE
                                         break;
                                 }
 
-                                Compress(compressionAlgorithm, comprLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffer, ref cBuff);
+                                Compress(compressionAlgorithm, comprLevel, Frame.Layers[LayerID].BrotliWindowSize, in tileBuffFiltered, ref cBuff);
 
                                 if (cBuff.Length < numBytesCompressedTile)
                                 {
@@ -1170,7 +1183,7 @@ namespace BNGCORE
             }
         }
 
-        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, in MemoryStream iBuff, ref byte[] cBuff)
+        void Compress(Compression compression, int compressionLevel, int brotliWindowSize, in byte[] iBuff, ref byte[] cBuff)
         {
             switch (compression)
             {
@@ -1179,18 +1192,19 @@ namespace BNGCORE
                     using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize > 24 ? 24 : brotliWindowSize))
                     {
                         int consumed, written;
-                        be.Compress(iBuff.ToArray(), cBuff, out consumed, out written, true);
+                        be.Compress(iBuff, cBuff, out consumed, out written, true);
                         Array.Resize(ref cBuff, written);
                     }
                     break;
                 case Compression.ZSTD:
                     Compressor zstdCompressor = new Compressor(compressionLevel);
-                    cBuff = zstdCompressor.Wrap(iBuff.ToArray()).ToArray();
+                    cBuff = zstdCompressor.Wrap(iBuff).ToArray();
                     break;
                 case Compression.LZW:
                     MemoryStream lzwComprBuffer = new();
+                    MemoryStream reader = new MemoryStream(iBuff);
                     LZW lzwCoder = new();
-                    lzwCoder.Compress(iBuff, lzwComprBuffer);
+                    lzwCoder.Compress(reader, lzwComprBuffer);
                     cBuff = lzwComprBuffer.ToArray();
                     break;
                 case Compression.None:

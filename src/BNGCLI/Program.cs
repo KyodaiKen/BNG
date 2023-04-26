@@ -135,7 +135,7 @@ namespace BNG_CLI {
                             FileSource fileinfo = new();
                             fileinfo.pathName = "";
                             fileinfo.importParameters = new();
-                            fileinfo.importParameters.Flags = Flags.COMPRESSED_HEADER;
+                            fileinfo.importParameters.Flags = 0; //Flags.COMPRESSED_HEADER;
                             string[] options = Split(input, ',');
                             foreach (string option in options) {
                                 string[] tuple = new string[2];
@@ -440,6 +440,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
+                                        fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.Brotli = comprLevelBrotli;
                                         break;
                                     case "bwnd":
@@ -470,6 +471,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
+                                        fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.ZSTD = comprLevelZSTD;
                                         break;
                                     case "ensop":

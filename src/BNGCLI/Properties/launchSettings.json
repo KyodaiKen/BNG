@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-v 2 -i compressed\\dragon_huge.bng decompressed",
+      "commandLineArgs": "-e -i \"fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500,lnm=Saiko artist,flt=average,compr=brotli,clvlb=11,ensop=80\" compressed\\saiko-artist.bng",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }
