@@ -15,7 +15,8 @@ using System.Xml.Serialization;
 namespace BNG_CLI {
     public enum Task {
         Encode,
-        Decode
+        Decode,
+        Analyze
     }
 
     public struct FileSource {
@@ -59,16 +60,28 @@ namespace BNG_CLI {
 
 
             Help.WriteLine("Usage ------------------------------------------");
-            Help.WriteLine("BNGCLI [-e -i <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation> <output file name>] [-i <bng file> <output path>] \n");
+            Help.WriteLine("BNGCLI [-e -i <\"filename=<file>;key=value,filename=<file>;key=value;key=value\" notation> <output file name>] [-a] [-i <bng file> <output path>] \n");
+
+            Help.Write("-e  Tell the program to go into encode mode. If not set, BNG_CLI will assume a BNG file to be decoded.\n");
+            Help.Write("-a  Tell the program to analyze a BNG file and output info about it. Can be combined with -v 2 for full output.\n");
+            Help.Write("-i  <file name> is for decoding bng files.\n\n");
 
             //Scan for encoding task
-            Help.Write("-e  Tell the program to go into encode mode. If not set, BNG_CLI will assume a BNG file to be decoded.\n\n");
             FindArg("-e", FoundE);
             Task = Task.Decode;
             void FoundE(long index) {
                 _Task = Task.Encode;
             }
 
+            //Scan for analysis task
+            FindArg("-a", FoundA);
+            Task = Task.Decode;
+            void FoundA(long index)
+            {
+                _Task = Task.Analyze;
+            }
+
+            //Verbose level
             FindArg("-v", FoundV);
             void FoundV(long index)
             {
@@ -541,7 +554,34 @@ namespace BNG_CLI {
                         ErrorState = true;
                     }
                 }
-            } else {
+            }
+            else if (_Task == Task.Analyze)
+            {
+                //Decode
+                Help.WriteLine("Options for analysis--------------------------------------\n");
+                Help.WriteLine("BNGCLI -v 2 -a -i \"myfile.bng;my other file.bng\"");
+                Help.WriteLine("-i           File names in \"aaa;bbb\" notation");
+                Help.WriteLine("-v  <number> Verbosity level 0 ... 2. 0 doesn't output anything, 1 only outputs the frame and layer info,\n"+
+                              "             2 outputs frame, layer and individual tile info.");
+
+                FindArg("-i", FoundAI, NotFoundAI);
+                void FoundAI(long index)
+                {
+                    string[] inputs = Split(_args[index + 1], ';');
+                    foreach (string input in inputs)
+                    {
+                        FileSource fileinfo = new();
+                        fileinfo.pathName = input;
+                        InputFiles.Add(fileinfo);
+                    }
+                }
+                void NotFoundAI()
+                {
+                    Output.WriteLine("Error: No inputs given!");
+                    ErrorState = true;
+                }
+            }
+            else {
                 //Decode
                 Help.WriteLine("Options for decoding--------------------------------------\n");
                 Help.WriteLine("BNGCLI -i \"myfile.bng;my other file.bng\" n:\\my\\output\\path");
@@ -760,7 +800,7 @@ namespace BNG_CLI {
                     outFile.Dispose();
                     break;
                 case Task.Decode:
-
+                case Task.Analyze:
                     long fi = 0;
                     foreach (var file in p.InputFiles) {
                         fi++;
@@ -782,7 +822,7 @@ namespace BNG_CLI {
                             cf++;
                             FrameHeader bng;
                             if (!BNGToDecode.LoadBNG(ref inFile, out info, out bng)) {
-                                Console.WriteLine(fi > 1 ? "No further BNG frame was found. Finalizing..." : "Error: No BNG frame was found. Aborting...");
+                                Console.WriteLine(cf > 1 ? "No further BNG frame was found. Finalizing..." : "Error: No BNG frame was found. Aborting...");
                                 break;
                             }
 
@@ -791,7 +831,7 @@ namespace BNG_CLI {
                                 TimeSpan now = new(DateTime.Now.Ticks);
                                 if ((now - last).TotalMilliseconds > 100 || progress.progress == 0.0 || progress.progress == 100.0)
                                 {
-                                    lock(Console.Out)
+                                    lock (Console.Out)
                                     {
                                         Console.Write('\r');
                                         Console.Write(new string(' ', Console.WindowWidth));
@@ -810,27 +850,35 @@ namespace BNG_CLI {
                             string frTitle = string.Format("\nFound BNG frame {0}", cf);
                             Console.Write(frTitle + new string('=', 40 - frTitle.Length));
                             Console.Write(info.ToString());
-                            for (var layer  = 0; layer < bng.Layers.Count; layer++) {
-                                Console.WriteLine("\nExtracting layer {0}/{1}...", layer+1, bng.Layers.Count);
-                                //Determine output file name
-                                string outNamePortion = string.Empty;
-                                if (outNamePortion == string.Empty) outNamePortion = bng.Layers[layer].Name;
-                                if (outNamePortion == string.Empty) outNamePortion = "_" + cf.ToString();
-                                string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
-                                Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + Path.DirectorySeparatorChar + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
-                                BNGToDecode.DecodeLayerToRaw( inFile,  outFileDec, layer);
+                            if (p.Task != Task.Analyze)
+                            {
+                                for (var layer = 0; layer < bng.Layers.Count; layer++)
+                                {
+                                    Console.WriteLine("\nExtracting layer {0}/{1}...", layer + 1, bng.Layers.Count);
+                                    //Determine output file name
+                                    string outNamePortion = string.Empty;
+                                    if (outNamePortion == string.Empty) outNamePortion = bng.Layers[layer].Name;
+                                    if (outNamePortion == string.Empty) outNamePortion = "_" + cf.ToString();
+                                    string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
-                                Console.Write('\r');
-                                Console.Write(new string(' ', Console.WindowWidth));
-                                Console.Write('\r');
-                                Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
+                                    Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + Path.DirectorySeparatorChar + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+                                    BNGToDecode.DecodeLayerToRaw(inFile, outFileDec, layer);
 
-                                outFileDec.Close();
-                                outFileDec.Dispose();
+                                    Console.Write('\r');
+                                    Console.Write(new string(' ', Console.WindowWidth));
+                                    Console.Write('\r');
+                                    Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
+
+                                    outFileDec.Close();
+                                    outFileDec.Dispose();
+                                }
                             }
+                            else
+                                BNGToDecode.JumpToEndOfFrame(ref inFile);
                         }
 
+                        Console.WriteLine(string.Format("Done, processing took {0}", dsw.Elapsed));
                         dsw.Stop();
                         inFile.Dispose();
                     }

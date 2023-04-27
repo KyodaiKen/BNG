@@ -703,6 +703,14 @@ namespace BNGCORE
                     break;
             }
         }
+
+        public void JumpToEndOfFrame(ref Stream InputStream)
+        {
+            if (InputStream == null) throw new ArgumentNullException(nameof(File));
+            if (InputStream.CanSeek == false) throw new AccessViolationException("Stream not seekable");
+            if (InputStream.CanRead == false) throw new AccessViolationException("Stream not readable");
+            InputStream.Seek((long)Frame.DataLength, SeekOrigin.Current);
+        }
         #endregion
 
         #region Helpers

@@ -2,8 +2,8 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i \"fn=N:\\commissions\\Bianca\\The_Artspear\\Stickers\\chainsaw_massage.tiff,ensop=80\" compressed\\bianca-chainsaw-massage.bng",
-      "workingDirectory": "D:\\temp\\bng_test"
+      "commandLineArgs": "bngcli -v 2 -a -i bng-icon.bng",
+      "workingDirectory": "D:\\temp\\bng_test\\compressed"
     }
   }
 }
