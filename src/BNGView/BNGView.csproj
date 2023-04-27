@@ -6,9 +6,13 @@
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <ApplicationIcon>bng-file-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <None Remove=".gitignore" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="bng-file-icon.ico" />
   </ItemGroup>
 
   <ItemGroup>
