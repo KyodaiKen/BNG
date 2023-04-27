@@ -2,7 +2,7 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "-e -i \"fn=Saiko_Artist-2500x3500xRGB24.data,w=2500,h=3500,lnm=Saiko artist,flt=average,compr=brotli,clvlb=11,ensop=80\" compressed\\saiko-artist.bng",
+      "commandLineArgs": "-e -i \"fn=N:\\commissions\\Bianca\\RevolutionX\\Bianca Dragon\\Commission-Bianca-Drache-by-Sarah-Adomssent-gigapixel-gigapixel.tif\" compressed\\dragon-huge.bng",
       "workingDirectory": "D:\\temp\\bng_test"
     }
   }

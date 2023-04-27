@@ -192,7 +192,7 @@ namespace BNGCORE
         public List<Compression> Compressions { get; set; }
         public CompressionLevel CompressionLevel { get; set; }
         public int BrotliWindowSize { get; set; } = 14;
-        public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
+        public (double h, double v) Resolution { get; set; } = (96.0, 96.0);
         public string LayerName { get; set; } = string.Empty;
         public string LayerDescription { get; set; } = string.Empty;
         public bool LayerToCurrentFrame { get; set; } = false;
@@ -358,7 +358,7 @@ namespace BNGCORE
             if (VerboseLevel > 0)
             {
                 log.AppendLine("\n" + string.Format("BNG Frame Version....: {0}", Frame.Version));
-                log.AppendLine(string.Format("Fame.................: {0}", Frame.Name));
+                log.AppendLine(string.Format("Name.................: {0}", Frame.Name));
                 log.AppendLine(string.Format("Description..........: {0}", Frame.Description));
                 log.AppendLine(string.Format("Width................: {0}", Frame.Width));
                 log.AppendLine(string.Format("Height...............: {0}", Frame.Height));

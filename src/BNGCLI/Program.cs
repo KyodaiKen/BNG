@@ -1,8 +1,13 @@
 using BNGCORE;
+using MemoryPack.Formatters;
+using SixLabors.ImageSharp.ColorSpaces;
+using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Memory;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
@@ -126,6 +131,9 @@ namespace BNG_CLI {
                                "                                                                    If more is needed than set here, a temporary file in the\n"+
                                "                                                                    destination path is used instead.");
                 Help.WriteLine("    uch=   (Default=0)                Use uncompressed headers      1 = enabled, 0 = disabled");
+
+                int bwnd = 24; // Brotli window default
+                int uch = 0; //Uncompressed headers default
 
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
@@ -447,7 +455,6 @@ namespace BNG_CLI {
                                         fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "bwnd":
-                                        int bwnd = 24;
                                         if (!int.TryParse(tuple[1], out bwnd)) {
                                             Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
                                             ErrorState = true;
@@ -458,7 +465,6 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        fileinfo.importParameters.BrotliWindowSize = bwnd;
                                         fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "clvlz":
@@ -495,7 +501,6 @@ namespace BNG_CLI {
                                         fileinfo.importParameters.Flags |= Flags.STREAMING_OPTIMIZED;
                                         break;
                                     case "uch":
-                                        int uch = 0;
                                         if (!int.TryParse(tuple[1], out uch))
                                         {
                                             Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
@@ -508,17 +513,22 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (uch == 1)
-                                        {
-                                            fileinfo.importParameters.Flags &= ~Flags.COMPRESSED_HEADER;
-                                        }
-                                        else
-                                        {
-                                            fileinfo.importParameters.Flags |= Flags.COMPRESSED_HEADER;
-                                        }
                                         break;
                                 }
                             }
+
+                            //Set header compression flag
+                            if (uch == 1)
+                            {
+                                fileinfo.importParameters.Flags &= ~Flags.COMPRESSED_HEADER;
+                            }
+                            else
+                            {
+                                fileinfo.importParameters.Flags |= Flags.COMPRESSED_HEADER;
+                            }
+
+                            //Set Brotli window
+                            fileinfo.importParameters.BrotliWindowSize = bwnd;
 
                             fileinfo.importParameters.SourceDimensions = (width, height);
                             fileinfo.outputDirectory = "";
@@ -675,22 +685,41 @@ namespace BNG_CLI {
 
                     long frame = 0;
                     Stream nullStream = null;
+                    Stream decodedForeignFormatImageStream = null;
+
 
                     foreach (FileSource f in p.InputFiles) {
+
                         Stopwatch fsw = new();
                         fsw.Start();
-                        
+                       
                         if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
                             Console.WriteLine(string.Format("Creating new frame {0}...", frame));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
+                            {
+                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
+                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
+                            }
+                            else
+                            {
+                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            }
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
+                            {
+                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
+                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
+                            }
+                            else
+                            {
+                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            }
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
                             Console.WriteLine(string.Format("Writing Frame {0}...", frame));
@@ -707,7 +736,15 @@ namespace BNG_CLI {
                             frame++;
                             Console.WriteLine("\n" + string.Format("Creating Frame {0}/{1}...", frame, p.InputFiles.Count));
                             Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
+                            {
+                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
+                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
+                            }
+                            else
+                            {
+                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            }
                             Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
@@ -804,6 +841,176 @@ namespace BNG_CLI {
             Console.Write(string.Format("Overall processing took {0}\n", sw.Elapsed));
 
             return 0;
+        }
+
+        static MemoryStream getForeignFormatPixelData(string pathName, RAWImportParameters importParameters)
+        {
+            MemoryStream pixelData = null;
+
+
+            var info = Image.Identify(pathName);
+            var fmt = info.Metadata.DecodedImageFormat;
+            byte[] data = new byte[info.Width * info.Height * (info.PixelType.BitsPerPixel / 8)];
+            Span<byte> pixelDataSpan = new Span<byte>(data);
+
+            switch (fmt.DefaultMimeType)
+            {
+                case "image/png":
+                    switch (info.Metadata.GetPngMetadata().ColorType)
+                    {
+                        case SixLabors.ImageSharp.Formats.Png.PngColorType.Grayscale:
+                            importParameters.SourceColorSpace = ColorSpace.GRAY;
+                            importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                            importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel;
+
+                            switch (info.PixelType.BitsPerPixel)
+                            {
+                                case 8:
+                                    using (var img = Image.Load<L8>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                                case 16:
+                                    using (var img = Image.Load<L16>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                            }
+                            break;
+                        case SixLabors.ImageSharp.Formats.Png.PngColorType.GrayscaleWithAlpha:
+                            importParameters.SourceColorSpace = ColorSpace.GRAYA;
+                            importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                            importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 2;
+                            switch (info.PixelType.BitsPerPixel)
+                            {
+                                case 16:
+                                    using (var img = Image.Load<La16>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                                case 32:
+                                    using (var img = Image.Load<La32>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                            }
+                            break;
+                        case SixLabors.ImageSharp.Formats.Png.PngColorType.Rgb:
+                            importParameters.SourceColorSpace = ColorSpace.RGB;
+                            importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                            importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 3;
+                            switch (info.PixelType.BitsPerPixel)
+                            {
+                                case 24:
+                                    using (var img = Image.Load<Rgb24>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                                case 48:
+                                    using (var img = Image.Load<Rgb48>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                            }
+                            break;
+                        case SixLabors.ImageSharp.Formats.Png.PngColorType.RgbWithAlpha:
+                            importParameters.SourceColorSpace = ColorSpace.RGBA;
+                            importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                            importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 4;
+                            switch (info.PixelType.BitsPerPixel)
+                            {
+                                case 32:
+                                    using (var img = Image.Load<Rgba32>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                                case 64:
+                                    using (var img = Image.Load<Rgba64>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                    break;
+                            }
+                            break;
+                    }
+                    break;
+                case "image/tiff":
+                case "image/tiff-fx":
+
+                    switch (info.FrameMetadataCollection.First().GetTiffMetadata().PhotometricInterpretation)
+                    {
+                        case SixLabors.ImageSharp.Formats.Tiff.Constants.TiffPhotometricInterpretation.BlackIsZero:
+                            if (info.PixelType.AlphaRepresentation == PixelAlphaRepresentation.None)
+                            {
+                                importParameters.SourceColorSpace = ColorSpace.GRAY;
+                                importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                                importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel;
+
+                                switch (info.PixelType.BitsPerPixel)
+                                {
+                                    case 8:
+                                        using (var img = Image.Load<L8>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                    case 16:
+                                        using (var img = Image.Load<L16>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                }
+                            }
+                            else
+                            {
+                                importParameters.SourceColorSpace = ColorSpace.GRAYA;
+                                importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                                importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 2;
+                                switch (info.PixelType.BitsPerPixel)
+                                {
+                                    case 16:
+                                        using (var img = Image.Load<La16>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                    case 32:
+                                        using (var img = Image.Load<La32>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                }
+                            }
+
+                            break;
+                        case SixLabors.ImageSharp.Formats.Tiff.Constants.TiffPhotometricInterpretation.Rgb:
+                            bool hasAlpha = false;
+                            foreach (var frame in info.FrameMetadataCollection)
+                            {
+                                if(frame.GetTiffMetadata().PhotometricInterpretation == SixLabors.ImageSharp.Formats.Tiff.Constants.TiffPhotometricInterpretation.TransparencyMask)
+                                {
+                                    hasAlpha = true;
+                                }
+                            }
+                            if (!hasAlpha)
+                            {
+                                importParameters.SourceColorSpace = ColorSpace.RGB;
+                                importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                                importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 3;
+                                switch (info.PixelType.BitsPerPixel)
+                                {
+                                    case 24:
+                                        using (var img = Image.Load<Rgb24>(pathName))
+                                            img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                    case 48:
+                                        using (var img = Image.Load<Rgb48>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                }
+                            }
+                            else
+                            {
+                                importParameters.SourceColorSpace = ColorSpace.RGBA;
+                                importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
+                                importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 4;
+                                switch (info.PixelType.BitsPerPixel)
+                                {
+                                    case 32:
+                                        using (var img = Image.Load<Rgba32>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                    case 64:
+                                        using (var img = Image.Load<Rgba64>(pathName)) img.CopyPixelDataTo(pixelDataSpan);
+                                        break;
+                                }
+                            }
+                            break;
+                    }
+                    break;
+            }
+
+            if (pixelDataSpan != null)
+            {
+                importParameters.FrameWidth = (uint)info.Width;
+                importParameters.FrameHeight = (uint)info.Height;
+                importParameters.SourceDimensions = ((uint)info.Width, (uint)info.Height);
+                pixelData = new MemoryStream(data);
+                return pixelData;
+            }
+            else
+                throw new Exception("Could not load foreign image using ImageSharp");
         }
     }
 }

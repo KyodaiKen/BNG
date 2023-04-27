@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="libpng-sharp" Version="0.1.18" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.0.1" />
   </ItemGroup>
 
   <ItemGroup>
