@@ -130,7 +130,7 @@ namespace BNGCORE
         public List<DataBlock>? ExtraData { get; set; }
         public CompressionPreFilter[,] CompressionPreFilterIndex { get; set; }
         public Compression[,] CompressionIndex { get; set; }
-        public ulong[,] TileDataLengths { get; set; }
+        public uint[,] TileDataLengths { get; set; }
     }
 
     [MemoryPackable]
@@ -191,7 +191,7 @@ namespace BNGCORE
         public List<CompressionPreFilter> CompressionPreFilters { get; set; }
         public List<Compression> Compressions { get; set; }
         public CompressionLevel CompressionLevel { get; set; }
-        public int BrotliWindowSize { get; set; } = 0;
+        public int BrotliWindowSize { get; set; } = 14;
         public (double h, double v) Resolution { get; set; } = (72.0, 72.0);
         public string LayerName { get; set; } = string.Empty;
         public string LayerDescription { get; set; } = string.Empty;
@@ -425,7 +425,7 @@ namespace BNGCORE
                             log.Append("\n" + tleNum);
                             log.AppendLine(new string('-', 40 - tleNum.Length));
                         }
-                        ulong tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
+                        uint tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
                         Frame.Layers[layer].TileDataOffsets[tileX, tileY] += tileDataOffset;
                         tileDataOffset += tleSzPacked;
 
@@ -877,7 +877,7 @@ namespace BNGCORE
                 var tileSize = CalculateTileDimension(Frame.Layers[LayerID].ColorSpace, Frame.Layers[LayerID].BitsPerChannel, Frame.TileSizeFactor);
                 long bytesWritten = 0;
 
-                Frame.Layers[LayerID].TileDataLengths = new ulong[numTilesX, numTilesY];
+                Frame.Layers[LayerID].TileDataLengths = new uint[numTilesX, numTilesY];
                 Frame.Layers[LayerID].TileDimensions = new (uint w, uint h)[numTilesX, numTilesY];
                 Frame.Layers[LayerID].CompressionPreFilterIndex = new CompressionPreFilter[numTilesX, numTilesY];
                 Frame.Layers[LayerID].CompressionIndex = new Compression[numTilesX, numTilesY];
@@ -988,7 +988,7 @@ namespace BNGCORE
                                     {
                                         //This tile hasn't been flushed yet. Flush it and delete the data to free memory.
                                         oStream.Write(tileOutputBuffer[ti]);
-                                        Frame.Layers[LayerID].TileDataLengths[x, y] = (ulong)tileOutputBuffer[ti].Length;
+                                        Frame.Layers[LayerID].TileDataLengths[x, y] = (uint)tileOutputBuffer[ti].Length;
                                         Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ti].Length;
                                         tileOutputBuffer.Remove(ti);
                                     }
@@ -1189,7 +1189,7 @@ namespace BNGCORE
             {
                 case Compression.Brotli:
                     cBuff = new byte[iBuff.Length];
-                    using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize > 24 ? 24 : brotliWindowSize))
+                    using (var be = new BrotliEncoder(compressionLevel, brotliWindowSize > 24 ? 24 : brotliWindowSize < 10 ? 10 : brotliWindowSize))
                     {
                         int consumed, written;
                         be.Compress(iBuff, cBuff, out consumed, out written, true);
@@ -1301,7 +1301,7 @@ namespace BNGCORE
 
             newLayer.BitsPerPixel = CalculateBitsPerPixel(newLayer.ColorSpace, newLayer.BitsPerChannel);
 
-            if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = newLayer.BitsPerPixel;
+            if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = 24;
 
             var tileSize = CalculateTileDimension(newLayer.ColorSpace, newLayer.BitsPerChannel, Frame.TileSizeFactor);
             var numTilesX = (uint)Math.Floor(newLayer.Width / (double)tileSize.w);

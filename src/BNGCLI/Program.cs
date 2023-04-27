@@ -112,19 +112,20 @@ namespace BNG_CLI {
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Custom, Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
-                Help.WriteLine("    flt=   (Default=Average)          Dot (.) separated list of compression pre-filters to try\n" +
-                               "                                        Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
-                Help.WriteLine("    compr= (Default=LZW)              Dot (.) separated list of compression algorithms to try\n" +
-                               "                                        Possible values:              { None, Brotli, LZW, ZSTD }");
-                Help.WriteLine("    clvlb= (Default=N/A)              Brotli ompression level       1 ... 11");
-                Help.WriteLine("    clvlz= (Default=N/A)              ZSTD Compression level        1 ... 22");
-                Help.WriteLine("    bwnd=  (Default=bpc,max 24)       Brotli window size            10 ... 24");
+                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
+                Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
+                               "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
+                Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
+                               "                                      Possible values:              { None, Brotli, LZW, ZSTD }");
+                Help.WriteLine("    clvlb= (Default=from preset)      Brotli ompression level       1 ... 11");
+                Help.WriteLine("    bwnd=  (Default24)                Brotli window size            10 ... 24");
+                Help.WriteLine("    clvlz= (Default=from preset)      ZSTD Compression level        1 ... 22");
 
                 Help.WriteLine("\n  File layout\n");
                 Help.WriteLine("    ensop= (Default=80)               Enable streaming optimizer    Value (float) defines the percentage of FREE memory to be used.\n"+
                                "                                                                    If more is needed than set here, a temporary file in the\n"+
                                "                                                                    destination path is used instead.");
+                Help.WriteLine("    uch=   (Default=0)                Use uncompressed headers      1 = enabled, 0 = disabled");
 
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
@@ -425,6 +426,7 @@ namespace BNG_CLI {
                                         }
                                         else
                                         {
+                                            fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                             fileinfo.importParameters.Compressions = comprs;
                                         }
                                         break;
@@ -442,20 +444,22 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.Brotli = comprLevelBrotli;
+                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "bwnd":
-                                        int bwnd;
+                                        int bwnd = 24;
                                         if (!int.TryParse(tuple[1], out bwnd)) {
                                             Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (bwnd < 0 || bwnd > 24) {
+                                        if (bwnd < 10 || bwnd > 24) {
                                             Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
                                             ErrorState = true;
                                             return;
                                         }
                                         fileinfo.importParameters.BrotliWindowSize = bwnd;
+                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "clvlz":
                                         int comprLevelZSTD;
@@ -473,6 +477,7 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.ZSTD = comprLevelZSTD;
+                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "ensop":
                                         float ensop;
@@ -488,6 +493,29 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.MaxRepackMemoryPercentage = ensop;
                                         fileinfo.importParameters.Flags |= Flags.STREAMING_OPTIMIZED;
+                                        break;
+                                    case "uch":
+                                        int uch = 0;
+                                        if (!int.TryParse(tuple[1], out uch))
+                                        {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (uch < 0 || uch > 1)
+                                        {
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (uch == 1)
+                                        {
+                                            fileinfo.importParameters.Flags &= ~Flags.COMPRESSED_HEADER;
+                                        }
+                                        else
+                                        {
+                                            fileinfo.importParameters.Flags |= Flags.COMPRESSED_HEADER;
+                                        }
                                         break;
                                 }
                             }
