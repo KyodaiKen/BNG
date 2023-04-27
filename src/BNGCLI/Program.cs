@@ -97,7 +97,7 @@ namespace BNG_CLI {
                 //Encode
                 Help.WriteLine("Options for encoding--------------------------------------\n");
                 Help.WriteLine("BNGCLI -e -i \"fn=myfile.raw,w=1024,h=768,ensop=80;fn=my other file.raw,w=1280,h=720,ensop=80\" my.bng\n");
-                Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn=<file>,key=value,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
+                Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn='<fi;le>',key=`val,ue`,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
                 Help.WriteLine("\n  Input file\n");
                 Help.WriteLine("    fn=    (Required)                 Input file name               Relative or absolute file path");
                 Help.WriteLine("    fsqb=  (Default=None)             File sequence begin number    Integer from 0 to " + long.MaxValue.ToString());
@@ -136,7 +136,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
                                "                                      Possible values:              { None, Brotli, LZW, ZSTD }");
                 Help.WriteLine("    clvlb= (Default=from preset)      Brotli ompression level       1 ... 11");
-                Help.WriteLine("    bwnd=  (Default24)                Brotli window size            10 ... 24");
+                Help.WriteLine("    bwnd=  (Default=24)               Brotli window size            10 ... 24");
                 Help.WriteLine("    clvlz= (Default=from preset)      ZSTD Compression level        1 ... 22");
 
                 Help.WriteLine("\n  File layout\n");
@@ -147,6 +147,7 @@ namespace BNG_CLI {
 
                 int bwnd = 24; // Brotli window default
                 int uch = 0; //Uncompressed headers default
+                float ensop = 80f; //Set enable stream optimization default to enabled with 80% free memory util.
 
                 FindArg("-i", FoundMI, NotFoundMI);
                 void FoundMI(long index) {
@@ -158,7 +159,7 @@ namespace BNG_CLI {
                             fileinfo.pathName = "";
                             fileinfo.importParameters = new();
                             fileinfo.importParameters.Flags = 0; //Flags.COMPRESSED_HEADER;
-                            string[] options = Split(input, ',');
+                            string[] options = Split(input, ',', '`');
                             foreach (string option in options) {
                                 string[] tuple = new string[2];
                                 tuple[0] = option.Substring(0, option.IndexOf('='));
@@ -499,7 +500,6 @@ namespace BNG_CLI {
                                         fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
                                         break;
                                     case "ensop":
-                                        float ensop;
                                         if (!float.TryParse(tuple[1], out ensop)) {
                                             Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
                                             ErrorState = true;
@@ -510,8 +510,6 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        fileinfo.importParameters.MaxRepackMemoryPercentage = ensop;
-                                        fileinfo.importParameters.Flags |= Flags.STREAMING_OPTIMIZED;
                                         break;
                                     case "uch":
                                         if (!int.TryParse(tuple[1], out uch))
@@ -538,6 +536,18 @@ namespace BNG_CLI {
                             else
                             {
                                 fileinfo.importParameters.Flags |= Flags.COMPRESSED_HEADER;
+                            }
+
+                            //Set stream optimization flag according to ensop value
+                            if (ensop > 0)
+                            {
+                                fileinfo.importParameters.MaxRepackMemoryPercentage = ensop;
+                                fileinfo.importParameters.Flags |= Flags.STREAMING_OPTIMIZED;
+                            }
+                            else
+                            {
+                                fileinfo.importParameters.MaxRepackMemoryPercentage = 0;
+                                fileinfo.importParameters.Flags &= ~Flags.STREAMING_OPTIMIZED;
                             }
 
                             //Set Brotli window
@@ -643,13 +653,13 @@ namespace BNG_CLI {
             notFoundCallback.Invoke();
         }
 
-        private string[] Split(string line, char by) {
+        private string[] Split(string line, char by, char q = '\'') {
             List<string> result = new List<string>();
             StringBuilder currentStr = new StringBuilder("");
             bool inQuotes = false;
             for (int i = 0; i < line.Length; i++) // For each character
             {
-                if (line[i] == '\'') // Quotes are closing or opening
+                if (line[i] == q) // Quotes are closing or opening
                     inQuotes = !inQuotes;
                 else if (line[i] == by) // Comma
                 {
