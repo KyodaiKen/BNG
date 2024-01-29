@@ -392,7 +392,7 @@ namespace BNG_CLI {
                                         }
                                         void PresetNotFound()
                                         {
-                                            Output.WriteLine("Error: Value preset flt is invalid!");
+                                            Output.WriteLine("Error: Value for preset is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
