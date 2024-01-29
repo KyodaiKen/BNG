@@ -130,7 +130,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
+                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Fast, Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
                 Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
                                "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
@@ -166,6 +166,7 @@ namespace BNG_CLI {
                                 tuple[1] = option.Substring(option.IndexOf('=') + 1);
                                 switch (tuple[0]) {
                                     case "fn":
+                                    case "filename":
                                         fileinfo.pathName = tuple[1];
                                         break;
                                     case "w":
@@ -198,7 +199,7 @@ namespace BNG_CLI {
                                             fileinfo.importParameters.SourcePixelFormat = (PixelFormat)enumVal;
                                         }
                                         void PFNotFound() {
-                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            Output.WriteLine("Error: Value for pf is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
@@ -253,14 +254,14 @@ namespace BNG_CLI {
                                         fileinfo.importParameters.FrameHeight = ch;
                                         break;
                                     case "frdur":
-                                        long fDur = 0;
-                                        if (!long.TryParse(tuple[1], out fDur)) {
-                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                        double fDur = 0;
+                                        if (!double.TryParse(tuple[1], out fDur)) {
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
                                         if (fDur < 0) {
-                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
@@ -269,12 +270,12 @@ namespace BNG_CLI {
                                     case "fropn":
                                         int fropn = 0;
                                         if (!int.TryParse(tuple[1], out fropn)) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for fropn. Please enter 1");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (fropn < 0) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for fropn. Please enter 1");
                                             ErrorState = true;
                                             return;
                                         }
@@ -286,7 +287,7 @@ namespace BNG_CLI {
                                             fileinfo.importParameters.CompositingColorSpace = (ColorSpace)enumVal;
                                         }
                                         void FCCSNotFound() {
-                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            Output.WriteLine("Error: Value for fccs is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
@@ -296,19 +297,19 @@ namespace BNG_CLI {
                                             fileinfo.importParameters.CompositingPixelFormat = (PixelFormat)enumVal;
                                         }
                                         void FCPFNotFound() {
-                                            Output.WriteLine("Error: Value for cs is invalid!");
+                                            Output.WriteLine("Error: Value for fcpf is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
                                     case "fcbpc":
                                         uint fcbpc = 0;
                                         if (!uint.TryParse(tuple[1], out fcbpc)) {
-                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            Output.WriteLine("Error: Illegal number for fcbpc. Please enter one of 8, 16, 32, 64.");
                                             ErrorState = true;
                                             break;
                                         }
                                         if (fcbpc != 0 || fcbpc != 8 || fcbpc != 16 || fcbpc != 32 | fcbpc != 64) {
-                                            Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
+                                            Output.WriteLine("Error: Illegal number for fcbpc. Please enter one of 8, 16, 32, 64.");
                                             ErrorState = true;
                                             break;
                                         }
@@ -319,12 +320,12 @@ namespace BNG_CLI {
                                     case "ltc":
                                         int ltc = 0;
                                         if (!int.TryParse(tuple[1], out ltc)) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
                                         if (ltc < 0) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
@@ -372,12 +373,12 @@ namespace BNG_CLI {
                                     case "lcf":
                                         int lcf = 0;
                                         if (!int.TryParse(tuple[1], out lcf)) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
                                         if (lcf < 0) {
-                                            Output.WriteLine("Error: Illegal number for l4f Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString());
                                             ErrorState = true;
                                             return;
                                         }
@@ -391,7 +392,7 @@ namespace BNG_CLI {
                                         }
                                         void PresetNotFound()
                                         {
-                                            Output.WriteLine("Error: Value for flt is invalid!");
+                                            Output.WriteLine("Error: Value preset flt is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
@@ -436,14 +437,14 @@ namespace BNG_CLI {
                                             }
                                             void COMPRNotFound()
                                             {
-                                                Output.WriteLine("Error: Value for flt is invalid!");
+                                                Output.WriteLine("Error: Value for compr is invalid!");
                                                 ErrorState = true;
                                             }
                                         }
 
                                         if (comprs.Count == 0)
                                         {
-                                            Output.WriteLine("Error: Value for flt is invalid!");
+                                            Output.WriteLine("Error: Value for compr is invalid!");
                                             ErrorState = true;
                                         }
                                         else
@@ -455,7 +456,7 @@ namespace BNG_CLI {
                                     case "clvlb":
                                         int comprLevelBrotli;
                                         if (!int.TryParse(tuple[1], out comprLevelBrotli)) {
-                                            Output.WriteLine("Error: Illegal number for level. Please enter an integer number depending on the compression algorithm.");
+                                            Output.WriteLine("Error: Illegal number for Brotli level. Please enter an integer number depending on the compression algorithm.");
                                             ErrorState = true;
                                             return;
                                         }
@@ -470,12 +471,12 @@ namespace BNG_CLI {
                                         break;
                                     case "bwnd":
                                         if (!int.TryParse(tuple[1], out bwnd)) {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 10 and 24");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (bwnd < 10 || bwnd > 24) {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 24");
+                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 10 and 24");
                                             ErrorState = true;
                                             return;
                                         }
@@ -485,7 +486,7 @@ namespace BNG_CLI {
                                         int comprLevelZSTD;
                                         if (!int.TryParse(tuple[1], out comprLevelZSTD))
                                         {
-                                            Output.WriteLine("Error: Illegal number for level. Please enter an integer number depending on the compression algorithm.");
+                                            Output.WriteLine("Error: Illegal number for ZSTD level. Please enter an integer number depending on the compression algorithm.");
                                             ErrorState = true;
                                             return;
                                         }
@@ -501,12 +502,12 @@ namespace BNG_CLI {
                                         break;
                                     case "ensop":
                                         if (!float.TryParse(tuple[1], out ensop)) {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for uch. Please enter an integer number between 0 and 100 (float)");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (ensop < 0 || ensop > 100) {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for uch. Please enter an integer number between 0 and 100 (float)");
                                             ErrorState = true;
                                             return;
                                         }
@@ -514,13 +515,13 @@ namespace BNG_CLI {
                                     case "uch":
                                         if (!int.TryParse(tuple[1], out uch))
                                         {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for uch. Parameter 1 is accepted. For keeping header compression enabled, leave this parameter out.");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (uch < 0 || uch > 1)
                                         {
-                                            Output.WriteLine("Error: Illegal number for bwnd. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for uch. Parameter 1 is accepted. For keeping header compression enabled, leave this parameter out.");
                                             ErrorState = true;
                                             return;
                                         }
