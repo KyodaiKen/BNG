@@ -96,8 +96,8 @@ namespace BNG_CLI {
             if (_Task == Task.Encode) {
                 //Encode
                 Help.WriteLine("Options for encoding--------------------------------------\n");
-                Help.WriteLine("BNGCLI -e -i \"fn=myfile.raw,w=1024,h=768,ensop=80;fn=my other file.raw,w=1280,h=720,ensop=80\" my.bng\n");
-                Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn='<fi;le>',key=`val,ue`,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
+                Help.WriteLine("BNGCLI -e -i \"fn=myfile.raw,w=1024,h=768;fn=my other file.raw,w=1280,h=720\" my.bng\n");
+                Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn='<fi;le>',key=value.`val,ue`,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
                 Help.WriteLine("\n  Input file\n");
                 Help.WriteLine("    fn=    (Required)                 Input file name               Relative or absolute file path");
                 Help.WriteLine("    fsqb=  (Default=None)             File sequence begin number    Integer from 0 to " + long.MaxValue.ToString());
@@ -128,6 +128,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    loy=   (Default=0)                Layer offset Y                Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    lop=   (Default=1)                Layer opacity                 Fraction between 0 and 1");
                 Help.WriteLine("    lbm=   (Default=Normal)           Layer blend mode              { Normal, Multiply, Divide, Subtract }");
+                Help.WriteLine("    lts=   (Default=Auto)             Layer tile size override      Auto or number between 32 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
                 Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Fast, Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
@@ -159,6 +160,7 @@ namespace BNG_CLI {
                             fileinfo.pathName = "";
                             fileinfo.importParameters = new();
                             fileinfo.importParameters.Flags = 0; //Flags.COMPRESSED_HEADER;
+                            fileinfo.importParameters.OverrideTileSize = 0;
                             string[] options = Split(input, ',', '`');
                             foreach (string option in options) {
                                 string[] tuple = new string[2];
@@ -171,14 +173,14 @@ namespace BNG_CLI {
                                         break;
                                     case "w":
                                         if (!uint.TryParse(tuple[1], out width)) {
-                                            Output.WriteLine("Error: Illegal number for w. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for w. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         break;
                                     case "h":
                                         if (!uint.TryParse(tuple[1], out height)) {
-                                            Output.WriteLine("Error: Illegal number for h. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for h. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
@@ -228,12 +230,12 @@ namespace BNG_CLI {
                                     case "cw":
                                         uint cw = 0;
                                         if (!uint.TryParse(tuple[1], out cw)) {
-                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (cw < 0) {
-                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for cw. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
@@ -242,12 +244,12 @@ namespace BNG_CLI {
                                     case "ch":
                                         uint ch = 0;
                                         if (!uint.TryParse(tuple[1], out cw)) {
-                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (cw < 0) {
-                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ch. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
@@ -256,12 +258,12 @@ namespace BNG_CLI {
                                     case "frdur":
                                         double fDur = 0;
                                         if (!double.TryParse(tuple[1], out fDur)) {
-                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (fDur < 0) {
-                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for frdur. Please enter an integer number between 0 and " + double.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
@@ -320,12 +322,12 @@ namespace BNG_CLI {
                                     case "ltc":
                                         int ltc = 0;
                                         if (!int.TryParse(tuple[1], out ltc)) {
-                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (ltc < 0) {
-                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for ltc Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
@@ -339,21 +341,22 @@ namespace BNG_CLI {
                                         break;
                                     case "lox":
                                         if (!uint.TryParse(tuple[1], out lox)) {
-                                            Output.WriteLine("Error: Illegal number for lox. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for lox. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         break;
                                     case "loy":
                                         if (!uint.TryParse(tuple[1], out loy)) {
-                                            Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for loy. Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         break;
                                     case "lop":
                                         double lop;
-                                        if (!double.TryParse(tuple[1], out lop)) {
+                                        if (!double.TryParse(tuple[1], out lop))
+                                        {
                                             Output.WriteLine("Error: Illegal number for lop. Please enter only numbers and a decimal point.");
                                             ErrorState = true;
                                             return;
@@ -370,15 +373,25 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                         }
                                         break;
+                                    case "lts":
+                                        uint lts = 0;
+                                        if (!uint.TryParse(tuple[1], out lts))
+                                        {
+                                            Output.WriteLine("Error: Illegal number for lts. Please enter a number between 32 and " + uint.MaxValue.ToString() + ".");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.OverrideTileSize = lts;
+                                        break;
                                     case "lcf":
                                         int lcf = 0;
                                         if (!int.TryParse(tuple[1], out lcf)) {
-                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (lcf < 0) {
-                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString());
+                                            Output.WriteLine("Error: Illegal number for lcf Please enter an integer number between 0 and " + uint.MaxValue.ToString() + ".");
                                             ErrorState = true;
                                             return;
                                         }

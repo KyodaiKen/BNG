@@ -2,8 +2,8 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "bngcli -v 2 -a -i bng-icon.bng",
-      "workingDirectory": "D:\\temp\\bng_test\\compressed"
+      "commandLineArgs": "bngcli -e -i \"fn=Bianca Tech Tank.png,lts=32,uch=1\" \"Bianca Tech Tank.bng\"",
+      "workingDirectory": "n:\\commissions\\Bianca\\The_Artspear\\Tank Smash\\"
     }
   }
 }

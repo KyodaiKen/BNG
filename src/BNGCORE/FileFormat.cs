@@ -4,6 +4,7 @@ using MemoryPack;
 using MemoryPack.Compression;
 using MemoryPack.Formatters;
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -209,7 +210,7 @@ namespace BNGCORE
         public LayerBlendMode LayerBlendMode { get; set; } = LayerBlendMode.Normal;
         public Flags Flags { get; set; } = 0;
         public float MaxRepackMemoryPercentage { get; set; }
-        public float TileSizeFactor { get; set; } = 1;
+        public uint OverrideTileSize { get; set; } = 0;
     }
 
     public class RAWImportParameters : ImportParameters
@@ -720,11 +721,11 @@ namespace BNGCORE
             return Helpers.GetNumChannels(pixelFormat) * (int)bitsPerChannel;
         }
 
-        private (uint w, uint h) CalculateTileDimension(ColorSpace pixelFormat, uint bitsPerChannel, float tileSizeMult)
+        private (uint w, uint h) CalculateTileDimension(ColorSpace pixelFormat, uint bitsPerChannel, uint tileSize)
         {
             int bytesPerPixel = CalculateBitsPerPixel(pixelFormat, bitsPerChannel) / 8;
-            float maxSize = tileSizeMult * 4096f;
-            uint size = (uint)(maxSize / bytesPerPixel);
+            uint size;
+            if (tileSize < 32) size = (uint)(1440 / bytesPerPixel); else size = tileSize;
             return (size, size);
         }
 
@@ -891,7 +892,7 @@ namespace BNGCORE
                 var stride = Frame.Layers[LayerID].Width * BytesPerPixel;
                 var numTilesX = Frame.Layers[LayerID].TileDataOffsets.GetLongLength(0);
                 var numTilesY = Frame.Layers[LayerID].TileDataOffsets.GetLongLength(1);
-                var tileSize = CalculateTileDimension(Frame.Layers[LayerID].ColorSpace, Frame.Layers[LayerID].BitsPerChannel, Frame.TileSizeFactor);
+                var tileSize = CalculateTileDimension(Frame.Layers[LayerID].ColorSpace, Frame.Layers[LayerID].BitsPerChannel, ImportParameters.OverrideTileSize);
                 long bytesWritten = 0;
 
                 Frame.Layers[LayerID].TileDataLengths = new uint[numTilesX, numTilesY];
@@ -964,7 +965,7 @@ namespace BNGCORE
                 {
                     //Parallel processing
                     int tileNum = (int)(numTilesY * numTilesX);
-                    Dictionary<int, byte[]> tileOutputBuffer = new();
+                    ConcurrentDictionary<int, byte[]> tileOutputBuffer = new();
                     bool[] tilesDone = new bool[tileNum];
                     bool[] tilesProcessing = new bool[tileNum];
 
@@ -974,7 +975,7 @@ namespace BNGCORE
                     var progressGovernor = Task.Run(() => {
                         while (true)
                         {
-                            Thread.Sleep(50);
+                            Thread.Sleep(100);
 
                             //Calculate progress
                             long dataProcessedSoFar = 0;
@@ -1007,7 +1008,7 @@ namespace BNGCORE
                                         oStream.Write(tileOutputBuffer[ti]);
                                         Frame.Layers[LayerID].TileDataLengths[x, y] = (uint)tileOutputBuffer[ti].Length;
                                         Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ti].Length;
-                                        tileOutputBuffer.Remove(ti);
+                                        tileOutputBuffer.TryRemove(key: ti, out _);
                                     }
                                 }
                                 else
@@ -1103,7 +1104,7 @@ namespace BNGCORE
                         cBuff = Array.Empty<byte>();
 
                         //Add tile into the buffer
-                        tileOutputBuffer.Add(i, smallest);
+                        tileOutputBuffer.TryAdd(i, smallest);
                         tilesDone[i] = true;
                         tilesProcessing[i] = false;
                     });
@@ -1244,7 +1245,6 @@ namespace BNGCORE
             Frame.Width = ImportParameters.FrameWidth;
             Frame.Height = ImportParameters.FrameHeight;
             Frame.Flags = ImportParameters.Flags;
-            Frame.TileSizeFactor = ImportParameters.TileSizeFactor;
             Frame.MaxRepackMemoryPercentage = ImportParameters.MaxRepackMemoryPercentage;
             Frame.DisplayTime = ImportParameters.FrameDuration;
             Frame.ResolutionH = ImportParameters.Resolution.h;
@@ -1320,7 +1320,7 @@ namespace BNGCORE
 
             if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = 24;
 
-            var tileSize = CalculateTileDimension(newLayer.ColorSpace, newLayer.BitsPerChannel, Frame.TileSizeFactor);
+            var tileSize = CalculateTileDimension(newLayer.ColorSpace, newLayer.BitsPerChannel, ImportParameters.OverrideTileSize);
             var numTilesX = (uint)Math.Floor(newLayer.Width / (double)tileSize.w);
             var numTilesY = (uint)Math.Floor(newLayer.Height / (double)tileSize.h);
 
