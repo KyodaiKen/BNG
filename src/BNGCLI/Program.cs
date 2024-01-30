@@ -1,8 +1,7 @@
 using BNGCORE;
 using MemoryPack.Formatters;
-using SixLabors.ImageSharp.ColorSpaces;
-using SixLabors.ImageSharp.Formats.Bmp;
-using SixLabors.ImageSharp.Memory;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
