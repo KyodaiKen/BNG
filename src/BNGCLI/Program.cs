@@ -41,6 +41,11 @@ namespace BNG_CLI {
         private delegate void dgEnumNotFound();
         private delegate void dgEnumFound(object enumVal);
 
+        private bool IsPowerOfTwo(ulong x)
+        {
+            return (x != 0) && ((x & (x - 1)) == 0);
+        }
+
         public ParseArguments(string[] args) {
             Output = new();
             Help = new();
@@ -212,7 +217,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             break;
                                         }
-                                        if (value != 0 || value != 8 || value != 16 || value != 32 | value != 64) {
+                                        if (!IsPowerOfTwo(value)) {
                                             Output.WriteLine("Error: Illegal number for bpc. Please enter one of 8, 16, 32, 64.");
                                             ErrorState = true;
                                             break;
