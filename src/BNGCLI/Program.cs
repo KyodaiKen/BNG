@@ -135,7 +135,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lts=   (Default=Auto)             Layer tile size override      Auto or number between 32 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=Medium)           Compression effort preset.    { Fast, Normal, Medium, High, Ultra, Slow, Slower, Placebo }");
+                Help.WriteLine("    preset=(Default=4)                Compression effort preset.    1 ... 10");
                 Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
                                "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
@@ -402,16 +402,14 @@ namespace BNG_CLI {
                                         fileinfo.importParameters.LayerClosesFrame = lcf == 1;
                                         break;
                                     case "preset":
-                                        AssignEnum(typeof(CompressionPresets), tuple[1], PresetNotFound, PresetFound);
-                                        void PresetFound(object enumVal)
+                                        byte cpreset = 0;
+                                        if (!byte.TryParse(tuple[1], out cpreset))
                                         {
-                                            fileinfo.importParameters.CompressionPreset = (CompressionPresets)enumVal;
-                                        }
-                                        void PresetNotFound()
-                                        {
-                                            Output.WriteLine("Error: Value for preset is invalid!");
+                                            Output.WriteLine("Error: Illegal number for preset Please enter an integer number between 0 and 10.");
                                             ErrorState = true;
+                                            return;
                                         }
+                                        fileinfo.importParameters.CompressionPreset = cpreset;
                                         break;
                                     case "flt":
                                         var listFltrs = tuple[1].Split('.');
@@ -466,7 +464,7 @@ namespace BNG_CLI {
                                         }
                                         else
                                         {
-                                            fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
+                                            fileinfo.importParameters.CompressionPreset = 0;
                                             fileinfo.importParameters.Compressions = comprs;
                                         }
                                         break;
@@ -484,7 +482,7 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.Brotli = comprLevelBrotli;
-                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
+                                        fileinfo.importParameters.CompressionPreset = 0;
                                         break;
                                     case "bwnd":
                                         if (!int.TryParse(tuple[1], out bwnd)) {
@@ -497,7 +495,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
+                                        fileinfo.importParameters.CompressionPreset = 0;
                                         break;
                                     case "clvlz":
                                         int comprLevelZSTD;
@@ -515,7 +513,7 @@ namespace BNG_CLI {
                                         }
                                         fileinfo.importParameters.CompressionLevel ??= new();
                                         fileinfo.importParameters.CompressionLevel.ZSTD = comprLevelZSTD;
-                                        fileinfo.importParameters.CompressionPreset = CompressionPresets.Custom;
+                                        fileinfo.importParameters.CompressionPreset = 0;
                                         break;
                                     case "ensop":
                                         if (!float.TryParse(tuple[1], out ensop)) {

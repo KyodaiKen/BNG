@@ -30,19 +30,6 @@ namespace BNGCORE
         Subtract = 0x03
     }
 
-    public enum CompressionPresets : byte
-    {
-        Custom = 0,
-        Fast = 255,
-        Normal = 1,
-        Medium = 2,
-        High = 3,
-        Ultra = 4,
-        Slow = 5,
-        Slower = 6,
-        Placebo = 7
-    }
-
     public enum CompressionPreFilter : byte
     {
         None = 0x00,
@@ -189,7 +176,7 @@ namespace BNGCORE
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public CompressionPresets CompressionPreset { get; set; } = CompressionPresets.Medium;
+        public byte CompressionPreset { get; set; } = 4;
         public List<CompressionPreFilter> CompressionPreFilters { get; set; }
         public List<Compression> Compressions { get; set; }
         public CompressionLevel CompressionLevel { get; set; }
@@ -746,7 +733,7 @@ namespace BNGCORE
         public void SetParametersFromPreset(ref RAWImportParameters options)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
-            if (options.CompressionPreset == CompressionPresets.Custom)
+            if (options.CompressionPreset == 0)
             {
                 if (options.CompressionPreFilters == null) throw new ArgumentNullException("CompressionPreFilters");
                 if (options.Compressions == null) throw new ArgumentNullException("Compressions");
@@ -766,44 +753,53 @@ namespace BNGCORE
 
                 switch (options.CompressionPreset)
                 {
-                    case CompressionPresets.Fast:
-                        options.CompressionPreFilters.Add(CompressionPreFilter.Paeth);
+                    case 1:
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Paeth });
                         options.Compressions.Add(Compression.LZW);
                         break;
-                    case CompressionPresets.Normal:
+                    case 2:
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Average, CompressionPreFilter.Paeth });
+                        options.Compressions.Add(Compression.LZW);
+                        break;
+                    case 3:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.LZW);
                         break;
-                    case CompressionPresets.Medium:
+                    case 4:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.LZW);
                         options.Compressions.Add(Compression.Brotli);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
                         break;
-                    case CompressionPresets.High:
+                    case 5:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.LZW);
                         options.Compressions.Add(Compression.Brotli);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
                         break;
-                    case CompressionPresets.Ultra:
-                        options.CompressionPreFilters.AddRange(AllFilters);
-                        options.Compressions.Add(Compression.LZW);
-                        options.Compressions.Add(Compression.Brotli);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
-                        break;
-                    case CompressionPresets.Slow:
+                    case 6:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.LZW);
                         options.Compressions.Add(Compression.Brotli);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
                         break;
-                    case CompressionPresets.Slower:
+                    case 7:
+                        options.CompressionPreFilters.AddRange(NoMedian);
+                        options.Compressions.Add(Compression.LZW);
+                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
+                        break;
+                    case 8:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.AddRange(new List<Compression>() { Compression.LZW, Compression.Brotli, Compression.ZSTD });
                         options.CompressionLevel = new CompressionLevel() { Brotli = 10, ZSTD = 20 };
                         break;
-                    case CompressionPresets.Placebo:
+                    case 9:
+                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.Compressions.AddRange(new List<Compression>() { Compression.LZW, Compression.Brotli, Compression.ZSTD });
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 10, ZSTD = 20 };
+                        break;
+                    case 10:
                         options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.AddRange(new List<Compression>() { Compression.LZW, Compression.Brotli, Compression.ZSTD });
                         options.CompressionLevel = new CompressionLevel() { Brotli = 11, ZSTD = 22 };
