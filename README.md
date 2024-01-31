@@ -24,3 +24,6 @@ Better Network Graphics / Borg Network Graphics
 - Compressed image data using PNG like predictors / pre-filters and entropy encoders (Brotli, LZW, ZSTD)
 - Multi threaded encoding and decoding using tiles
 - Fast save and load (depending on the compression used as well as image size, platform and processing power of the platform)
+
+## Issues
+- BNGView cannot open images with more than 8 bits per channel.
