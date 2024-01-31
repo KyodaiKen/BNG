@@ -45,7 +45,7 @@ namespace BNGCORE.Filters {
 
         private static int Predictor(int left, int up)
         {
-            return Helpers.Median(new List<int> { left, up });
+            return left < up ? left : up;
         }
     }
 
@@ -61,7 +61,7 @@ namespace BNGCORE.Filters {
         }
         private static int Predictor(int left, int above, int upperLeft)
         {
-            return Helpers.Median(new List<int> { left, above, upperLeft });
+            return left < above ? (above < upperLeft ? above : upperLeft) : (upperLeft < above ? above : upperLeft);
         }
     }
 
