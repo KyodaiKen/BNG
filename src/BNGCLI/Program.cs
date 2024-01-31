@@ -699,7 +699,20 @@ namespace BNG_CLI {
             return Output.ToString();
         }
     }
+
     class Program {
+        private static string humanReadibleSize(long fSize)
+        {
+            string[] sizes = { "bytes", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB", "YiB" };
+            decimal len = fSize;
+            int order = 0;
+            while (len >= 1024 && order < sizes.Length - 1)
+            {
+                order++;
+                len = len / 1024;
+            }
+            return String.Format("{0:0.00} {1}", len, sizes[order]);
+        }
         static int Main(string[] args) {
             Stopwatch sw = new();
             sw.Start();
@@ -750,6 +763,8 @@ namespace BNG_CLI {
                     BNG.ProgressChangedEvent += pChanged;
 
                     long frame = 0;
+                    long uncompressedSize = 0;
+                    long inputFilesSize = 0;
                     Stream nullStream = null;
                     Stream decodedForeignFormatImageStream = null;
 
@@ -758,7 +773,8 @@ namespace BNG_CLI {
 
                         Stopwatch fsw = new();
                         fsw.Start();
-                       
+                        inputFilesSize += new System.IO.FileInfo(f.pathName).Length;
+
                         if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
@@ -814,6 +830,10 @@ namespace BNG_CLI {
                             Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
+                            if (decodedForeignFormatImageStream != null)
+                                uncompressedSize += decodedForeignFormatImageStream.Length;
+                            else
+                                uncompressedSize += f.importParameters.SourceDimensions.w * f.importParameters.SourceDimensions.h * BNG.CalculateBitsPerPixel(f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel);
                             Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.Write('\r');
@@ -822,6 +842,10 @@ namespace BNG_CLI {
                         fsw.Stop();
                     }
                     Console.WriteLine();
+                    Console.WriteLine("Size of all input files: " + humanReadibleSize(inputFilesSize));
+                    Console.WriteLine("Uncompressed size .... : " + humanReadibleSize(uncompressedSize));
+                    Console.WriteLine("Output file size ..... : " + humanReadibleSize(outFile.Length));
+                    Console.WriteLine(string.Format("Compression ratio .... : {0:0.00} % of input file, {1:0.00} % of uncompressed image data", (decimal)outFile.Length / inputFilesSize * 100, (decimal)outFile.Length / uncompressedSize * 100));
                     outFile.Close();
                     outFile.Dispose();
                     break;

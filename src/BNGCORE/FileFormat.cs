@@ -703,7 +703,7 @@ namespace BNGCORE
         #endregion
 
         #region Helpers
-        private int CalculateBitsPerPixel(ColorSpace pixelFormat, uint bitsPerChannel)
+        public int CalculateBitsPerPixel(ColorSpace pixelFormat, uint bitsPerChannel)
         {
             return Helpers.GetNumChannels(pixelFormat) * (int)bitsPerChannel;
         }
