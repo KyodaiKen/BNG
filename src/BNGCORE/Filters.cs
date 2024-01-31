@@ -61,7 +61,7 @@ namespace BNGCORE.Filters {
         }
         private static int Predictor(int left, int above, int upperLeft)
         {
-            return left < above ? (above < upperLeft ? above : upperLeft) : (upperLeft < above ? above : upperLeft);
+            return Math.Max(Math.Min(left, above), Math.Min(Math.Max(left, above), upperLeft));
         }
     }
 
