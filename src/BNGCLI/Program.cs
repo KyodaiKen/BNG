@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Serialization;
@@ -717,6 +718,13 @@ namespace BNG_CLI {
             Stopwatch sw = new();
             sw.Start();
 
+            Console.WriteLine("\x1b[94;1m{0}\x1b[93;1m{1}\x1b[0m\nUsing:"
+                , Assembly.GetExecutingAssembly().GetName().Name.PadRight(25, ' '), Assembly.GetExecutingAssembly().GetName().Version.ToString());
+
+            foreach (var assyname in Assembly.GetExecutingAssembly().GetReferencedAssemblies())
+                if (!assyname.Name.Contains("System"))
+                    Console.WriteLine("\x1b[92;1m{0}\x1b[93;1m{1}\x1b[0m", assyname.Name.PadRight(25,' '), assyname.Version.ToString());
+
             TextWriter Help = new StringWriter();
 
             Thread.CurrentThread.CurrentUICulture = new System.Globalization.CultureInfo("en-us");
@@ -749,11 +757,11 @@ namespace BNG_CLI {
                                 Console.Write('\r');
                                 if (progress.isMultithreaded)
                                 {
-                                    Console.Write(string.Format("Layer {1}/{2}: (Processing {3} tiles simultaenously, {4}/{5} in pool), {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                                    Console.Write(string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: (Processing \x1b[97;1m{3}\x1b[0m tiles simultaenously, \x1b[94;1m{4}/{5}\x1b[0m in pool), \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
                                 }
                                 else
                                 {
-                                    Console.Write(string.Format("Layer {1}/{2}: {0:0.00} percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                                    Console.Write(string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
                                 }
                             }
                             lastE = new(DateTime.Now.Ticks);
@@ -775,36 +783,34 @@ namespace BNG_CLI {
                         fsw.Start();
                         inputFilesSize += new System.IO.FileInfo(f.pathName).Length;
 
+                        void internalAddLayer()
+                        {
+                            Console.WriteLine("\u001b[94;1mAdding layer \u001b[96m" + Path.GetFileName(f.pathName) + "\u001b[0m");
+                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
+                            {
+                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
+                                Console.WriteLine("\u001b[93m{0}x{1}, {2}, {3} bits per channel, {4}\u001b[0m", f.importParameters.FrameWidth, f.importParameters.FrameHeight, f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel, f.importParameters.SourcePixelFormat);
+                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
+                            }
+                            else
+                            {
+                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
+                            }
+                        }
+                        if (f.importParameters.LayerName == "") f.importParameters.LayerName = f.pathName;
+                        if (f.importParameters.FrameName == "") f.importParameters.FrameName = f.pathName;
                         if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine(string.Format("Creating new frame {0}...", frame));
-                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
-                            {
-                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
-                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
-                            }
-                            else
-                            {
-                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
-                            }
+                            Console.WriteLine(string.Format("\x1b[95;1mCreating new frame {0}...\u001b[0m", frame));
+                            internalAddLayer();
                         }
                         if (f.importParameters.LayerToCurrentFrame && !f.importParameters.OpenFrame) {
-                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
-                            {
-                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
-                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
-                            }
-                            else
-                            {
-                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
-                            }
+                            internalAddLayer();
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
-                            Console.WriteLine(string.Format("Writing Frame {0}...", frame));
+                            Console.WriteLine(string.Format("\x1b[95;1mWriting Frame {0}...\u001b[0m", frame));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                             Console.Write('\r');
@@ -816,18 +822,9 @@ namespace BNG_CLI {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
                             frame++;
-                            Console.WriteLine("\n" + string.Format("Creating Frame {0}/{1}...", frame, p.InputFiles.Count));
-                            Console.WriteLine("Adding layer " + Path.GetFileName(f.pathName));
-                            if (Path.GetExtension(f.pathName).ToLower() == ".png" || Path.GetExtension(f.pathName).ToLower() == ".tiff" || Path.GetExtension(f.pathName).ToLower() == ".tif")
-                            {
-                                decodedForeignFormatImageStream = getForeignFormatPixelData(f.pathName, f.importParameters);
-                                BNG.AddLayer("", f.importParameters, ref decodedForeignFormatImageStream);
-                            }
-                            else
-                            {
-                                BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
-                            }
-                            Console.WriteLine(string.Format("Writing Frame {0}/{1}...", frame, p.InputFiles.Count));
+                            Console.WriteLine("\n" + string.Format("\u001b[95;1mCreating Frame {0}/{1}...\u001b[0m", frame, p.InputFiles.Count));
+                            internalAddLayer();
+                            Console.WriteLine(string.Format("\u001b[95;1mWriting Frame {0}/{1}...\u001b[0m", frame, p.InputFiles.Count));
                             BNG.WriteBNGFrame(ref outFile);
                             BNG.Dispose();
                             if (decodedForeignFormatImageStream != null)
@@ -837,15 +834,15 @@ namespace BNG_CLI {
                             Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.Write('\r');
-                            Console.Write(string.Format("Done, processing took {0}", fsw.Elapsed));
+                            Console.Write(string.Format("\u001b[92mDone, processing took {0}\u001b[0m", fsw.Elapsed));
                         }
                         fsw.Stop();
                     }
                     Console.WriteLine();
-                    Console.WriteLine("Size of all input files: " + humanReadibleSize(inputFilesSize));
-                    Console.WriteLine("Uncompressed size .... : " + humanReadibleSize(uncompressedSize));
-                    Console.WriteLine("Output file size ..... : " + humanReadibleSize(outFile.Length));
-                    Console.WriteLine(string.Format("Compression ratio .... : {0:0.00} % of input file, {1:0.00} % of uncompressed image data", (decimal)outFile.Length / inputFilesSize * 100, (decimal)outFile.Length / uncompressedSize * 100));
+                    Console.WriteLine("\x1b[96mSize of all input files: \x1b[93m{0}", humanReadibleSize(inputFilesSize).Replace(" ", "\x1b[0m "));
+                    Console.WriteLine("\x1b[96mUncompressed size .... : \x1b[93m{0}", humanReadibleSize(uncompressedSize).Replace(" ", "\x1b[0m "));
+                    Console.WriteLine("\x1b[96mOutput file size ..... : \x1b[93m{0}", humanReadibleSize(outFile.Length).Replace(" ", "\x1b[0m "));
+                    Console.WriteLine("\x1b[96mCompression ratio .... : \x1b[93m{0:0.00}\x1b[0m % of input file, \u001b[93m{1:0.00}\u001b[0m % of uncompressed image data", (decimal)outFile.Length / inputFilesSize * 100, (decimal)outFile.Length / uncompressedSize * 100);
                     outFile.Close();
                     outFile.Dispose();
                     break;
@@ -936,7 +933,7 @@ namespace BNG_CLI {
             }
 
             sw.Stop();
-            Console.Write(string.Format("Overall processing took {0}\n", sw.Elapsed));
+            Console.Write(string.Format("\x1b[97;1mOverall processing took {0}\x1b[0m\n", sw.Elapsed));
 
             return 0;
         }
