@@ -4,6 +4,7 @@ using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -762,17 +763,23 @@ namespace BNG_CLI {
                         {
                             lock (Console.Out)
                             {
-                                Console.Write('\r');
-                                Console.Write(new string(' ', Console.WindowWidth));
-                                Console.Write('\r');
+
+                                //Console.Write(new string(' ', Console.WindowWidth));
+                                //Console.Write('\r');
+                                var strp = "";
+                                int strlen = 0;
                                 if (progress.isMultithreaded)
                                 {
-                                    Console.Write(string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: (Processing \x1b[97;1m{3}\x1b[0m tiles simultaenously, \x1b[94;1m{4}/{5}\x1b[0m in pool), \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles));
+                                    strp = string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: (Processing \x1b[97;1m{3}\x1b[0m tiles simultaenously, \x1b[94;1m{4}/{5}\x1b[0m in pool), \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers, progress.tilesProcessing, progress.tilesInPool, progress.numTiles);
+                                    strlen = 44;
                                 }
                                 else
                                 {
-                                    Console.Write(string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers));
+                                    strp = string.Format("Layer \x1b[93;1m{1}/{2}\x1b[0m: \x1b[95;1m{0:0.00}\x1b[0m percent done", progress.progress, progress.currentLayer + 1, progress.numLayers);
+                                    strlen = 22;
                                 }
+                                Console.Write('\r');
+                                Console.Write(strp + new string(' ', Console.WindowWidth - strp.Length + strlen));
                             }
                             lastE = new(DateTime.Now.Ticks);
                         }

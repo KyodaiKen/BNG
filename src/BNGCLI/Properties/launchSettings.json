@@ -2,8 +2,8 @@
   "profiles": {
     "BNG_CLI": {
       "commandName": "Project",
-      "commandLineArgs": "bngcli -e -i \"fn=Bianca Tech Tank.png,lts=32,uch=1\" \"Bianca Tech Tank.bng\"",
-      "workingDirectory": "n:\\commissions\\Bianca\\The_Artspear\\Tank Smash\\"
+      "commandLineArgs": "-e -i fn=Fucking_Die_Already.png,preset=11 Fucking_Die_Already.bng",
+      "workingDirectory": "n:\\commissions\\Bianca\\The_Artspear\\Just Die Already"
     }
   }
 }
