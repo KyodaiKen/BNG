@@ -2,7 +2,8 @@
   "profiles": {
     "BNGView": {
       "commandName": "Project",
-      "commandLineArgs": "\"D:\\temp\\bng_test\\compressed\\short-hair-gpx.bng\""
+      "commandLineArgs": "Fucking_Die_Already.bng",
+      "workingDirectory": "n:\\commissions\\Bianca\\The_Artspear\\Just Die Already"
     }
   }
 }

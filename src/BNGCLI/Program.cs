@@ -136,11 +136,11 @@ namespace BNG_CLI {
                 Help.WriteLine("    lts=   (Default=Auto)             Layer tile size override      Auto or number between 32 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=4)                Compression effort preset.    1 ... 10");
+                Help.WriteLine("    preset=(Default=5)                Compression effort preset.    (fastest) 1 ... 11 (slowest)");
                 Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
                                "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth }");
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
-                               "                                      Possible values:              { None, Brotli, LZW, ZSTD }");
+                               "                                      Possible values:              { None, Brotli, LZW, ZSTD, LZMA, XZ }");
                 Help.WriteLine("    clvlb= (Default=from preset)      Brotli ompression level       1 ... 11");
                 Help.WriteLine("    bwnd=  (Default=24)               Brotli window size            10 ... 24");
                 Help.WriteLine("    clvlz= (Default=from preset)      ZSTD Compression level        1 ... 22");
@@ -404,9 +404,19 @@ namespace BNG_CLI {
                                         break;
                                     case "preset":
                                         byte cpreset = 0;
+                                        void prntPresetValError()
+                                        {
+                                            Output.WriteLine("Error: Illegal number for preset Please enter an integer number between 0 and 11.");
+                                        }
                                         if (!byte.TryParse(tuple[1], out cpreset))
                                         {
-                                            Output.WriteLine("Error: Illegal number for preset Please enter an integer number between 0 and 10.");
+                                            prntPresetValError();
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (cpreset > 11 || cpreset < 1)
+                                        {
+                                            prntPresetValError();
                                             ErrorState = true;
                                             return;
                                         }
