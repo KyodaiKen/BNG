@@ -202,6 +202,7 @@ namespace BNGCORE
         public Flags Flags { get; set; } = 0;
         public float MaxRepackMemoryPercentage { get; set; }
         public uint OverrideTileSize { get; set; } = 0;
+        public int MaxThreadCount { get; set; } = -1;
     }
 
     public class RAWImportParameters : ImportParameters
@@ -1073,7 +1074,7 @@ namespace BNGCORE
                     });
 
                     //Run parallel tile processing
-                    plResult = Parallel.For(0, tileNum, (int i) => {
+                    plResult = Parallel.For(0, tileNum, new ParallelOptions() { MaxDegreeOfParallelism = ImportParameters.MaxThreadCount }, (int i) => {
                         tilesProcessing[i] = true;
                         int x = i % (int)numTilesX;
                         int y = i / (int)numTilesX;

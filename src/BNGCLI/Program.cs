@@ -106,8 +106,9 @@ namespace BNG_CLI {
                 Help.WriteLine("-i  List of input files and parameters. \"fn=<file>,key=value;fn='<fi;le>',key=value.`val,ue`,key=value\" notation. SINGLE-Quote things that contain ; or ,. (Required)\n");
                 Help.WriteLine("\n  Input file\n");
                 Help.WriteLine("    fn=    (Required)                 Input file name               Relative or absolute file path");
-                Help.WriteLine("    fsqb=  (Default=None)             File sequence begin number    Integer from 0 to " + long.MaxValue.ToString());
-                Help.WriteLine("    fsqe=  (Default=None)             File sequence end number      Integer from 0 to " + long.MaxValue.ToString());
+                //Help.WriteLine("    fsqb=  (Default=None)             File sequence begin number    Integer from 0 to " + long.MaxValue.ToString());
+                //Help.WriteLine("    fsqe=  (Default=None)             File sequence end number      Integer from 0 to " + long.MaxValue.ToString());
+                Help.WriteLine("    maxt=  (Default=-1)               Maximum number of threads     Integer from -1 (auto) to " + int.MaxValue.ToString());
 
                 Help.WriteLine("\n  RAW import\n");
                 Help.WriteLine("    w=     (Required)                 RAW image width               Integer from 0 to " + uint.MaxValue.ToString());
@@ -176,6 +177,22 @@ namespace BNG_CLI {
                                     case "fn":
                                     case "filename":
                                         fileinfo.pathName = tuple[1];
+                                        break;
+                                    case "maxt":
+                                        int maxt = -1;
+                                        if (!int.TryParse(tuple[1], out maxt))
+                                        {
+                                            Output.WriteLine("Error: Illegal number for maxt. Please enter an integer number between -1 and " + int.MaxValue.ToString() + " except 0.");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        if (maxt < -1 || maxt == 0)
+                                        {
+                                            Output.WriteLine("Error: Illegal number for maxt. Please enter an integer number between -1 and " + int.MaxValue.ToString() + " except 0.");
+                                            ErrorState = true;
+                                            return;
+                                        }
+                                        fileinfo.importParameters.MaxThreadCount = maxt;
                                         break;
                                     case "w":
                                         if (!uint.TryParse(tuple[1], out width)) {
