@@ -864,7 +864,7 @@ namespace BNG_CLI {
                             if (decodedForeignFormatImageStream != null)
                                 uncompressedSize += decodedForeignFormatImageStream.Length;
                             else
-                                uncompressedSize += f.importParameters.SourceDimensions.w * f.importParameters.SourceDimensions.h * BNG.CalculateBitsPerPixel(f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel);
+                                uncompressedSize += (f.importParameters.SourceDimensions.w * f.importParameters.SourceDimensions.h * (BNG.CalculateBitsPerPixel(f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel) / 8));
                             Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.Write('\r');
