@@ -134,7 +134,7 @@ namespace BNGView
                                     throw new NotSupportedException("Only 8 bits per channel are currently supported");
                             }
                             break;
-                        case BNGCORE.ColorSpace.RGBA:
+                        case BNGCORE.ColorSpace.RGBA_Straight:
                             switch (layer.BitsPerChannel)
                             {
                                 case 8:
