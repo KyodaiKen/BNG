@@ -114,6 +114,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    w=     (Required)                 RAW image width               Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    h=     (Required)                 RAW image height              Integer from 0 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    cs=    (Default=RGB)              RAW image Color space         { RGB, RGBA, YCrCb, YCrCbA, CMYK, CMYKA }");
+                Help.WriteLine("    am=    (Default=Straight)         Alpha mode (png and tif only) { Straight, PreMult }");
                 Help.WriteLine("    pf=    (Default=IntegerUnsigned)  RAW image Pixel format        { IntegerUnsigned, IntegerSigned, FloatIEEE }");
                 Help.WriteLine("    bpc=   (Default=8)                RAW image Bits per CHANNEL    { 8, 16, 32, 64 }");
 
@@ -215,6 +216,18 @@ namespace BNG_CLI {
                                         }
                                         void CSNotFound() {
                                             Output.WriteLine("Error: Value for cs is invalid!");
+                                            ErrorState = true;
+                                        }
+                                        break;
+                                    case "am":
+                                        AssignEnum(typeof(AlphaMode), tuple[1], AMNotFound, AMFound);
+                                        void AMFound(object enumVal)
+                                        {
+                                            fileinfo.importParameters.AlphaMode = (AlphaMode)enumVal;
+                                        }
+                                        void AMNotFound()
+                                        {
+                                            Output.WriteLine("Error: Value for alph is invalid!");
                                             ErrorState = true;
                                         }
                                         break;
@@ -1003,7 +1016,15 @@ namespace BNG_CLI {
                             }
                             break;
                         case SixLabors.ImageSharp.Formats.Png.PngColorType.GrayscaleWithAlpha:
-                            importParameters.SourceColorSpace = ColorSpace.GRAYA;
+                            switch (importParameters.AlphaMode)
+                            {
+                                case AlphaMode.Straight:
+                                    importParameters.SourceColorSpace = ColorSpace.GRAYA_Straight;
+                                    break;
+                                case AlphaMode.PreMultiplied:
+                                    importParameters.SourceColorSpace = ColorSpace.GRAYA_PreMult;
+                                    break;
+                            }
                             importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
                             importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 2;
                             switch (info.PixelType.BitsPerPixel)
@@ -1031,7 +1052,15 @@ namespace BNG_CLI {
                             }
                             break;
                         case SixLabors.ImageSharp.Formats.Png.PngColorType.RgbWithAlpha:
-                            importParameters.SourceColorSpace = ColorSpace.RGBA;
+                            switch (importParameters.AlphaMode)
+                            {
+                                case AlphaMode.Straight:
+                                    importParameters.SourceColorSpace = ColorSpace.RGBA_Straight;
+                                    break;
+                                case AlphaMode.PreMultiplied:
+                                    importParameters.SourceColorSpace = ColorSpace.RGBA_PreMult;
+                                    break;
+                            }
                             importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
                             importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 4;
                             switch (info.PixelType.BitsPerPixel)
@@ -1070,7 +1099,15 @@ namespace BNG_CLI {
                             }
                             else
                             {
-                                importParameters.SourceColorSpace = ColorSpace.GRAYA;
+                                switch (importParameters.AlphaMode)
+                                {
+                                    case AlphaMode.Straight:
+                                        importParameters.SourceColorSpace = ColorSpace.GRAYA_Straight;
+                                        break;
+                                    case AlphaMode.PreMultiplied:
+                                        importParameters.SourceColorSpace = ColorSpace.GRAYA_PreMult;
+                                        break;
+                                }
                                 importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
                                 importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 2;
                                 switch (info.PixelType.BitsPerPixel)
@@ -1112,7 +1149,16 @@ namespace BNG_CLI {
                             }
                             else
                             {
-                                importParameters.SourceColorSpace = ColorSpace.RGBA;
+                                switch (importParameters.AlphaMode)
+                                {
+                                    case AlphaMode.Straight:
+                                        importParameters.SourceColorSpace = ColorSpace.RGBA_Straight;
+                                        break;
+                                    case AlphaMode.PreMultiplied:
+                                        importParameters.SourceColorSpace = ColorSpace.RGBA_PreMult;
+                                        break;
+                                }
+                                
                                 importParameters.SourcePixelFormat = PixelFormat.IntegerUnsigned;
                                 importParameters.SourceBitsPerChannel = (uint)info.PixelType.BitsPerPixel / 4;
                                 switch (info.PixelType.BitsPerPixel)

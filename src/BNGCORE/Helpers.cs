@@ -14,15 +14,18 @@ namespace BNGCORE
             {
                 case ColorSpace.GRAY:
                     return 1;
-                case ColorSpace.GRAYA:
+                case ColorSpace.GRAYA_Straight:
+                case ColorSpace.GRAYA_PreMult:
                     return 2;
                 case ColorSpace.RGB:
                 case ColorSpace.YCrCb:
                     return 3;
-                case ColorSpace.RGBA:
+                case ColorSpace.RGBA_Straight:
+                case ColorSpace.RGBA_PreMult:
                 case ColorSpace.CMYK:
                     return 4;
-                case ColorSpace.CMYKA:
+                case ColorSpace.CMYKA_Straight:
+                case ColorSpace.CMYKA_PreMult:
                     return 5;
                 default: return 1;
             }

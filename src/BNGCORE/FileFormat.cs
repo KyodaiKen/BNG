@@ -54,16 +54,26 @@ namespace BNGCORE
         XZ = 5
     }
 
+    public enum AlphaMode
+    {
+        Straight = 1,
+        PreMultiplied = 2
+    }
+
     public enum ColorSpace : byte
     {
         GRAY = 0x10,
-        GRAYA = 0xA1,
+        GRAYA_Straight = 0xA1,
+        GRAYA_PreMult = 0xA2,
         RGB = 0x0B,
-        RGBA = 0xAB,
+        RGBA_Straight = 0xAB,
+        RGBA_PreMult = 0xA3,
         CMYK = 0x0C,
-        CMYKA = 0xAC,
+        CMYKA_Straight = 0xAC,
+        CMYKA_PreMult = 0xA4,
         YCrCb = 0x0F,
-        YCrCbA = 0xAF
+        YCrCbA_Straight = 0xAF,
+        YCrCbA_PreMult = 0xA5
     }
 
     public enum PixelFormat : byte
@@ -199,6 +209,7 @@ namespace BNGCORE
         public (uint x, uint y) LayerOffset { get; set; } = (0, 0);
         public double LayerOpacity { get; set; } = 1.0;
         public LayerBlendMode LayerBlendMode { get; set; } = LayerBlendMode.Normal;
+        public AlphaMode AlphaMode { get; set; } = AlphaMode.Straight;
         public Flags Flags { get; set; } = 0;
         public float MaxRepackMemoryPercentage { get; set; }
         public uint OverrideTileSize { get; set; } = 0;
