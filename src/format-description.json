@@ -1,0 +1,79 @@
+{
+    "title": "Kyo's Universal Raster Image Format",
+    "snort-name": "KURIF",
+    "description": "Compressed tile based image container format for interchanging raster image files",
+    "features":
+    {
+        "simple":
+        [
+            "tiling",
+            "layers",
+            "layer offsets",
+            "compositing",
+            "animation",
+            "compression",
+            "lossless",
+            "metadata",
+            "low overhead",
+            "multi threading",
+            "tile based partial image loading for low memory usage"
+        ],
+        "multi images":
+        [
+            "frames",
+            "pages"
+        ],
+        "color spaces": 
+        [
+            "RGB",
+            "CMYK",
+            "YCrCb",
+            "Lab",
+            "XYZ"
+        ],
+        "bits per channel":
+        [
+            8,
+            16,
+            32,
+            64
+        ],
+        "data formats":
+        [
+            "Integer",
+            "IEEEFloat"
+        ],
+        "alpha":
+        [
+            "premultiplied",
+            "straight"
+        ],
+        "layer blend modes":
+        [
+            "normal",
+            "add",
+            "subtract",
+            "multiply",
+            "divide"
+        ]
+    },
+    "compression": 
+    [
+        "lzw",
+        "zstd",
+        "brotli",
+        "xz",
+        "lzma"
+    ],
+    "predictors":
+    [
+        "sub",
+        "up",
+        "average",
+        "median",
+        "median2",
+        "paeth"
+    ],
+    "mime-types": ["image/kurif", "image/kur"],
+    "file-extensions": ["kur", "kuif", "kurif"]
+}
