@@ -445,7 +445,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (cpreset > 16)
+                                        if (cpreset > 11)
                                         {
                                             prntPresetValError();
                                             ErrorState = true;
