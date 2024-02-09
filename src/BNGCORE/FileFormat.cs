@@ -801,26 +801,23 @@ namespace BNGCORE
                         options.Compressions.Add(Compression.XZ);
                         break;
                     case 6:
-                        options.CompressionPreFilters.AddRange(NoMedian);
-                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 4 };
                         break;
                     case 7:
-                        options.CompressionPreFilters.AddRange(NoMedian);
+                        options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
                         break;
                     case 8:
-                        options.CompressionPreFilters.AddRange(NoMedian);
+                        options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.LZMA);
                         options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
                         break;
                     case 9:
-                        options.CompressionPreFilters.AddRange(NoMedian);
+                        options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.LZMA);
                         options.Compressions.Add(Compression.XZ);
@@ -828,15 +825,6 @@ namespace BNGCORE
                         options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
                         break;
                     case 10:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Median, CompressionPreFilter.Median2, CompressionPreFilter.JXLPred });
-                        options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.LZMA);
-                        options.Compressions.Add(Compression.XZ);
-                        options.Compressions.Add(Compression.LZW);
-                        options.Compressions.Add(Compression.ZSTD);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 11, ZSTD = 22 };
-                        break;
-                    case 11:
                         options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.LZMA);

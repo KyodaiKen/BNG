@@ -139,7 +139,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lts=   (Default=Auto)             Layer tile size override      Auto or number between 32 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=9)                Compression effort preset.    (fastest) 1 ... 11 (slowest)");
+                Help.WriteLine("    preset=(Default=9)                Compression effort preset.    (fastest) 1 ... 10 (slowest)");
                 Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
                                "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth, JXL_Pred }");
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
@@ -445,7 +445,7 @@ namespace BNG_CLI {
                                             ErrorState = true;
                                             return;
                                         }
-                                        if (cpreset > 11)
+                                        if (cpreset > 10)
                                         {
                                             prntPresetValError();
                                             ErrorState = true;
@@ -819,15 +819,16 @@ namespace BNG_CLI {
 
                     long frame = 0;
                     long uncompressedSize = 0;
+                    long pixelCount = 0;
                     long inputFilesSize = 0;
+                    double timeTaken = 0;
                     Stream nullStream = null;
                     Stream decodedForeignFormatImageStream = null;
 
 
                     foreach (FileSource f in p.InputFiles) {
 
-                        Stopwatch fsw = new();
-                        fsw.Start();
+
                         inputFilesSize += new System.IO.FileInfo(f.pathName).Length;
 
                         void internalAddLayer()
@@ -844,7 +845,9 @@ namespace BNG_CLI {
                                 BNG.AddLayer(f.pathName, f.importParameters, ref nullStream);
                             }
                         }
-                        if (f.importParameters.LayerName == "") f.importParameters.LayerName = f.pathName;
+
+                        Stopwatch fsw = new();
+
                         if (f.importParameters.FrameName == "") f.importParameters.FrameName = f.pathName;
                         if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
@@ -858,8 +861,16 @@ namespace BNG_CLI {
                         }
                         if (!f.importParameters.OpenFrame && f.importParameters.LayerClosesFrame && f.importParameters.LayerToCurrentFrame) {
                             Console.WriteLine(string.Format("\x1b[95;1mWriting Frame {0}...\u001b[0m", frame));
+                            fsw.Start();
                             BNG.WriteBNGFrame(ref outFile);
+                            fsw.Stop();
                             BNG.Dispose();
+                            if (decodedForeignFormatImageStream != null)
+                                uncompressedSize += decodedForeignFormatImageStream.Length;
+                            else
+                                uncompressedSize += (f.importParameters.SourceDimensions.w * f.importParameters.SourceDimensions.h * (BNG.CalculateBitsPerPixel(f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel) / 8));
+                            pixelCount = f.importParameters.FrameWidth * f.importParameters.FrameHeight;
+                            timeTaken += fsw.Elapsed.TotalSeconds;
                             Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.Write('\r');
@@ -872,24 +883,28 @@ namespace BNG_CLI {
                             Console.WriteLine("\n" + string.Format("\u001b[95;1mCreating Frame {0}/{1}...\u001b[0m", frame, p.InputFiles.Count));
                             internalAddLayer();
                             Console.WriteLine(string.Format("\u001b[95;1mWriting Frame {0}/{1}...\u001b[0m", frame, p.InputFiles.Count));
+                            fsw.Start();
                             BNG.WriteBNGFrame(ref outFile);
+                            fsw.Stop();
                             BNG.Dispose();
                             if (decodedForeignFormatImageStream != null)
                                 uncompressedSize += decodedForeignFormatImageStream.Length;
                             else
                                 uncompressedSize += (f.importParameters.SourceDimensions.w * f.importParameters.SourceDimensions.h * (BNG.CalculateBitsPerPixel(f.importParameters.SourceColorSpace, f.importParameters.SourceBitsPerChannel) / 8));
+                            pixelCount += f.importParameters.FrameWidth * f.importParameters.FrameHeight;
+                            timeTaken += fsw.Elapsed.TotalSeconds;
                             Console.Write('\r');
                             Console.Write(new string(' ', Console.WindowWidth));
                             Console.Write('\r');
-                            Console.Write(string.Format("\u001b[92mDone, processing took {0}\u001b[0m", fsw.Elapsed));
+                            Console.Write("\u001b[92mDone, processing took {0}\u001b[0m, processing speed: {1:0.000000} MP/s", fsw.Elapsed, f.importParameters.FrameWidth * f.importParameters.FrameHeight / fsw.Elapsed.TotalSeconds / 1000000);
                         }
-                        fsw.Stop();
                     }
                     Console.WriteLine();
                     Console.WriteLine("\x1b[96mSize of all input files: \x1b[93m{0}", humanReadibleSize(inputFilesSize).Replace(" ", "\x1b[0m "));
                     Console.WriteLine("\x1b[96mUncompressed size .... : \x1b[93m{0}", humanReadibleSize(uncompressedSize).Replace(" ", "\x1b[0m "));
                     Console.WriteLine("\x1b[96mOutput file size ..... : \x1b[93m{0}", humanReadibleSize(outFile.Length).Replace(" ", "\x1b[0m "));
                     Console.WriteLine("\x1b[96mCompression ratio .... : \x1b[93m{0:0.00}\x1b[0m % of input file, \u001b[93m{1:0.00}\u001b[0m % of uncompressed image data", (decimal)outFile.Length / inputFilesSize * 100, (decimal)outFile.Length / uncompressedSize * 100);
+                    Console.WriteLine("\x1b[96mProcessing speed ..... : \x1b[93m{0:0.00000}\u001b[0m MP/s", pixelCount / timeTaken / 1000000);
                     outFile.Close();
                     outFile.Dispose();
                     break;
