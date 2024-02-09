@@ -41,7 +41,7 @@ namespace BNGCORE
         Median = 0x31,
         Median2 = 0x32,
         Paeth = 0x40,
-        All = 0xFF
+        JXLPred = 0x50
     }
 
     public enum Compression : byte
@@ -190,11 +190,11 @@ namespace BNGCORE
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public byte CompressionPreset { get; set; } = 9;
+        public byte CompressionPreset { get; set; } = 6;
         public List<CompressionPreFilter> CompressionPreFilters { get; set; }
         public List<Compression> Compressions { get; set; }
         public CompressionLevel CompressionLevel { get; set; }
-        public int BrotliWindowSize { get; set; } = 14;
+        public int BrotliWindowSize { get; set; } = 24;
         public (double h, double v) Resolution { get; set; } = (96.0, 96.0);
         public string LayerName { get; set; } = string.Empty;
         public string LayerDescription { get; set; } = string.Empty;
@@ -677,6 +677,12 @@ namespace BNGCORE
                         unfilteredLine[col] = Median2.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
                     }
                     break;
+                case CompressionPreFilter.JXLPred:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                    {
+                        unfilteredLine[col] = JXL_Pred.UnFilter(in lineBuff, in unfilteredLine, in prevLineBuff, col, bytesPerPixel);
+                    }
+                    break;
                 default:
                     return lineBuff;
             }
@@ -769,9 +775,8 @@ namespace BNGCORE
                 options.CompressionPreFilters.Clear();
                 options.Compressions.Clear();
 
-                var AllFilters = new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Median, CompressionPreFilter.Median2, CompressionPreFilter.Paeth };
-                var NoMedian = new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Paeth };
-                var BestFilters = new List<CompressionPreFilter>() { CompressionPreFilter.Average, CompressionPreFilter.Paeth };
+                var AllFilters = new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Median, CompressionPreFilter.Median2, CompressionPreFilter.Paeth, CompressionPreFilter.JXLPred };
+                var NoMedian = new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Paeth, CompressionPreFilter.JXLPred };
 
                 switch (options.CompressionPreset)
                 {
@@ -780,74 +785,41 @@ namespace BNGCORE
                         options.Compressions.Add(Compression.LZW);
                         break;
                     case 2:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.Paeth, CompressionPreFilter.Average });
+                        options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.LZW);
                         break;
                     case 3:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.Sub, CompressionPreFilter.Average, CompressionPreFilter.Paeth });
+                        options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.LZW);
                         break;
                     case 4:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Paeth });
-                        options.Compressions.Add(Compression.LZW);
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Average, CompressionPreFilter.JXLPred });
+                        options.Compressions.Add(Compression.XZ);
                         break;
                     case 5:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Average });
-                        options.Compressions.Add(Compression.XZ);
-                        break;
-                    case 6:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Average, CompressionPreFilter.Paeth });
-                        options.Compressions.Add(Compression.XZ);
-                        break;
-                    case 7:
-                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Paeth });
-                        options.Compressions.Add(Compression.XZ);
-                        break;
-                    case 8:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.XZ);
                         break;
-                    case 9:
+                    case 6:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.XZ);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 4 };
                         break;
-                    case 10:
-                        options.CompressionPreFilters.AddRange(NoMedian);
-                        options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 8 };
-                        break;
-                    case 11:
+                    case 7:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.XZ);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
                         break;
-                    case 12:
+                    case 8:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.LZMA);
                         options.Compressions.Add(Compression.XZ);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 9 };
                         break;
-                    case 13:
-                        options.CompressionPreFilters.AddRange(NoMedian);
-                        options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.LZMA);
-                        options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 10};
-                        break;
-                    case 14:
-                        options.CompressionPreFilters.AddRange(NoMedian);
-                        options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.LZMA);
-                        options.Compressions.Add(Compression.XZ);
-                        options.Compressions.Add(Compression.LZW);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
-                        break;
-                    case 15:
+                    case 9:
                         options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.LZMA);
@@ -855,7 +827,16 @@ namespace BNGCORE
                         options.Compressions.Add(Compression.LZW);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
                         break;
-                    case 16:
+                    case 10:
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.Median, CompressionPreFilter.Median2, CompressionPreFilter.JXLPred });
+                        options.Compressions.Add(Compression.Brotli);
+                        options.Compressions.Add(Compression.LZMA);
+                        options.Compressions.Add(Compression.XZ);
+                        options.Compressions.Add(Compression.LZW);
+                        options.Compressions.Add(Compression.ZSTD);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 11, ZSTD = 22 };
+                        break;
+                    case 11:
                         options.CompressionPreFilters.AddRange(AllFilters);
                         options.Compressions.Add(Compression.Brotli);
                         options.Compressions.Add(Compression.LZMA);
@@ -1250,6 +1231,10 @@ namespace BNGCORE
                 case CompressionPreFilter.Median2:
                     for (long col = 0; col < lineBuff.LongLength; col++)
                         filtered[col] = Median2.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
+                    break;
+                case CompressionPreFilter.JXLPred:
+                    for (long col = 0; col < lineBuff.LongLength; col++)
+                        filtered[col] = JXL_Pred.Filter(in lineBuff, in prevLineBuff, col, BytesPerPixel);
                     break;
                 default:
                     Array.Copy(lineBuff, 0, filtered, 0, filtered.LongLength);

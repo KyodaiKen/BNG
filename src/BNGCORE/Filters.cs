@@ -88,4 +88,29 @@ namespace BNGCORE.Filters {
             }
         }
     }
+
+    public static class JXL_Pred
+    {
+        public static byte Filter(in byte[] cLine, in byte[] pLine, long col, int BytesPerPixel)
+        {
+            return Predictor(cLine[col], (col - BytesPerPixel < 0) ? 0 : cLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? 0 : pLine[col - BytesPerPixel], false);
+        }
+        public static byte UnFilter(in byte[] cLine, in byte[] dLine, in byte[] pLine, long col, int BytesPerPixel)
+        {
+            return Predictor(cLine[col], (col - BytesPerPixel < 0) ? 0 : dLine[col - BytesPerPixel], pLine[col], (col - BytesPerPixel < 0) ? 0 : pLine[col - BytesPerPixel], true);
+        }
+        private static byte Predictor(int px, int left, int top, int topleft, bool reverse)
+        {
+            var ac = left - topleft;
+            var ab = left - top;
+            var bc = top - topleft;
+            var grad = ac + top;
+            var d = ab ^ bc;
+            var zero = 0;
+            var clamp = zero > d ? top : left;
+            var s = ac ^ bc;
+            var pred = zero > s ? grad : clamp;
+            return reverse ? (byte)(px + pred) : (byte)(px - pred);
+        }
+    }
 }
