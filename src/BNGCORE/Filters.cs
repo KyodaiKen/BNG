@@ -28,7 +28,7 @@ namespace BNGCORE.Filters {
 
         private static int Predictor(int left, int above)
         {
-            return (int)Math.Floor((left + above) / 2f);
+            return (left + above) >> 1;
         }
     }
 

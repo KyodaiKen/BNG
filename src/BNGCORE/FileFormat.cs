@@ -29,7 +29,8 @@ namespace BNGCORE
         Normal = 0x00,
         Multiply = 0x01,
         Divide = 0x02,
-        Subtract = 0x03
+        Subtract = 0x03,
+        Add = 0x04
     }
 
     public enum CompressionPreFilter : byte
@@ -431,7 +432,7 @@ namespace BNGCORE
                             log.AppendLine(new string('-', 40 - tleNum.Length));
                         }
                         uint tleSzPacked = Frame.Layers[layer].TileDataLengths[tileX, tileY];
-                        Frame.Layers[layer].TileDataOffsets[tileX, tileY] += tileDataOffset;
+                        Frame.Layers[layer].TileDataOffsets[tileX, tileY] = tileDataOffset;
                         tileDataOffset += tleSzPacked;
 
                         Frame.Layers[layer].TileDataLengths[tileX, tileY] = tleSzPacked;
@@ -552,7 +553,7 @@ namespace BNGCORE
                     });
 
                     while (!plResult.IsCompleted)
-                        Thread.Sleep(1);
+                        Thread.Sleep(10);
 
                     //Writing to output
                     var stride = layer.Width * bytesPerPixel;
@@ -1009,8 +1010,7 @@ namespace BNGCORE
                             {
                                 if (tilesDone[ti])
                                 {
-                                    int x = ti % (int)numTilesX;
-                                    int y = ti / (int)numTilesX;
+                                    (long y, long x) = Math.DivRem(ti, numTilesX);
                                     var td = Frame.Layers[LayerID].TileDimensions[x, y];
                                     dataProcessedSoFar += td.w * td.h * BytesPerPixel;
                                 } else if (tilesProcessing[ti])
@@ -1022,15 +1022,13 @@ namespace BNGCORE
                             //Flush finished tiles in sequence
                             for (int ti = 0; ti < tileNum; ti++)
                             {
-                                int x = ti % (int)numTilesX;
-                                int y = ti / (int)numTilesX;
-
                                 if (tilesDone[ti])
                                 {
                                     if (tileOutputBuffer.ContainsKey(ti))
                                     {
                                         //This tile hasn't been flushed yet. Flush it and delete the data to free memory.
                                         oStream.Write(tileOutputBuffer[ti]);
+                                        (long y, long x) = Math.DivRem(ti, numTilesX);
                                         Frame.Layers[LayerID].TileDataLengths[x, y] = (uint)tileOutputBuffer[ti].Length;
                                         Frame.LayerDataLengths[LayerID] += (ulong)tileOutputBuffer[ti].Length;
                                         tileOutputBuffer.TryRemove(key: ti, out _);
@@ -1356,10 +1354,10 @@ namespace BNGCORE
             if (ImportParameters.BrotliWindowSize == 0) newLayer.BrotliWindowSize = 24;
 
             var tileSize = CalculateTileDimension(newLayer.ColorSpace, newLayer.BitsPerChannel, ImportParameters.OverrideTileSize);
-            var numTilesX = (uint)Math.Floor(newLayer.Width / (double)tileSize.w);
-            var numTilesY = (uint)Math.Floor(newLayer.Height / (double)tileSize.h);
+            var numTilesX = (ulong)Math.Ceiling(newLayer.Width / (double)tileSize.w);
+            var numTilesY = (ulong)Math.Ceiling(newLayer.Height / (double)tileSize.h);
 
-            newLayer.TileDataOffsets = new ulong[numTilesX + 1, numTilesY + 1];
+            newLayer.TileDataOffsets = new ulong[numTilesX, numTilesY];
             newLayer.BaseTileDimension = tileSize;
 
             Frame.Layers.Add(newLayer);

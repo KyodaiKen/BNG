@@ -559,12 +559,12 @@ namespace BNG_CLI {
                                         break;
                                     case "ensop":
                                         if (!float.TryParse(tuple[1], out ensop)) {
-                                            Output.WriteLine("Error: Illegal number for uch. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for ensop. Please enter an integer number between 0 and 100 (float)");
                                             ErrorState = true;
                                             return;
                                         }
                                         if (ensop < 0 || ensop > 100) {
-                                            Output.WriteLine("Error: Illegal number for uch. Please enter an integer number between 0 and 100 (float)");
+                                            Output.WriteLine("Error: Illegal number for ensop. Please enter an integer number between 0 and 100 (float)");
                                             ErrorState = true;
                                             return;
                                         }
@@ -849,6 +849,7 @@ namespace BNG_CLI {
                         Stopwatch fsw = new();
 
                         if (f.importParameters.FrameName == "") f.importParameters.FrameName = f.pathName;
+                        if (f.importParameters.LayerName == "") f.importParameters.LayerName = f.pathName;
                         if (f.importParameters.OpenFrame && !f.importParameters.LayerClosesFrame && !f.importParameters.LayerToCurrentFrame) {
                             BNG = new Bitmap();
                             BNG.ProgressChangedEvent += pChanged;
@@ -971,7 +972,7 @@ namespace BNG_CLI {
                                     if (outNamePortion == string.Empty) outNamePortion = "_" + cf.ToString();
                                     string outFileName = Path.GetFileNameWithoutExtension(file.pathName) + "_bng_export_" + outNamePortion + ".data";
 
-                                    Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + Path.DirectorySeparatorChar + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x100000);
+                                    Stream outFileDec = new FileStream(Path.TrimEndingDirectorySeparator(file.outputDirectory) + Path.DirectorySeparatorChar + outFileName, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read, 0x4000000, FileOptions.RandomAccess);
                                     BNGToDecode.DecodeLayerToRaw(inFile, outFileDec, layer);
 
                                     Console.Write('\r');
