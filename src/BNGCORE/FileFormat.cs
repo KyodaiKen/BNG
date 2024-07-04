@@ -2,16 +2,10 @@ using BNGCORE.Compressors;
 using BNGCORE.Filters;
 using MemoryPack;
 using MemoryPack.Compression;
-using MemoryPack.Formatters;
-using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO;
 using System.IO.Compression;
-using System.Reflection.Metadata.Ecma335;
-using System.Reflection.PortableExecutable;
 using System.Text;
-using System.Threading.Channels;
 using ZstdSharp;
 using Zaabee.LZMA;
 using Zaabee.XZ;
@@ -191,7 +185,7 @@ namespace BNGCORE
         public ColorSpace CompositingColorSpace { get; set; } = 0;
         public uint CompositingBitsPerChannel { get; set; } = 0;
         public PixelFormat CompositingPixelFormat { get; set; } = 0;
-        public byte CompressionPreset { get; set; } = 6;
+        public byte CompressionPreset { get; set; } = 7;
         public List<CompressionPreFilter> CompressionPreFilters { get; set; }
         public List<Compression> Compressions { get; set; }
         public CompressionLevel CompressionLevel { get; set; }
@@ -714,7 +708,14 @@ namespace BNGCORE
                     decompressedBuffer = compressedBuffer.UnLzma();
                     break;
                 case Compression.XZ:
-                    decompressedBuffer = compressedBuffer.UnXz();
+                    MemoryStream msAddHeaders = new();
+                    //Readd the XZ junk
+                    msAddHeaders.Write(new byte[] { 0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00, 0x00 });
+                    msAddHeaders.Write(compressedBuffer);
+                    msAddHeaders.Write(new byte[] { 0x00, 0x00, 0x00, 0x00 });
+                    msAddHeaders.WriteByte(compressedBuffer.First());
+                    msAddHeaders.Write(new byte[] { 0x59, 0x5A });
+                    decompressedBuffer = msAddHeaders.ToArray().UnXz();
                     break;
                 case Compression.None:
                     decompressedBuffer = compressedBuffer;
@@ -782,16 +783,16 @@ namespace BNGCORE
                 switch (options.CompressionPreset)
                 {
                     case 1:
-                        options.CompressionPreFilters.Add(CompressionPreFilter.Average);
+                        options.CompressionPreFilters.Add(CompressionPreFilter.JXLPred);
                         options.Compressions.Add(Compression.LZW);
                         break;
                     case 2:
-                        options.CompressionPreFilters.AddRange(NoMedian);
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.JXLPred });
                         options.Compressions.Add(Compression.LZW);
                         break;
                     case 3:
-                        options.CompressionPreFilters.AddRange(AllFilters);
-                        options.Compressions.Add(Compression.LZW);
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.JXLPred });
+                        options.Compressions.Add(Compression.XZ);
                         break;
                     case 4:
                         options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Average, CompressionPreFilter.JXLPred });
@@ -806,21 +807,22 @@ namespace BNGCORE
                         options.Compressions.Add(Compression.XZ);
                         break;
                     case 7:
-                        options.CompressionPreFilters.AddRange(AllFilters);
-                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionPreFilters.AddRange( new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.JXLPred });
                         options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
+                        options.Compressions.Add(Compression.Brotli);
+                        options.Compressions.Add(Compression.LZW);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 6 };
                         break;
                     case 8:
-                        options.CompressionPreFilters.AddRange(AllFilters);
-                        options.Compressions.Add(Compression.Brotli);
+                        options.CompressionPreFilters.AddRange(new List<CompressionPreFilter>() { CompressionPreFilter.None, CompressionPreFilter.Sub, CompressionPreFilter.Up, CompressionPreFilter.Average, CompressionPreFilter.JXLPred });
                         options.Compressions.Add(Compression.XZ);
-                        options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
+                        options.Compressions.Add(Compression.Brotli);
+                        options.Compressions.Add(Compression.LZW);
+                        options.CompressionLevel = new CompressionLevel() { Brotli = 10 };
                         break;
                     case 9:
-                        options.CompressionPreFilters.AddRange(AllFilters);
+                        options.CompressionPreFilters.AddRange(NoMedian);
                         options.Compressions.Add(Compression.Brotli);
-                        options.Compressions.Add(Compression.LZMA);
                         options.Compressions.Add(Compression.XZ);
                         options.Compressions.Add(Compression.LZW);
                         options.CompressionLevel = new CompressionLevel() { Brotli = 11 };
@@ -1256,7 +1258,10 @@ namespace BNGCORE
                     cBuff = iBuff.ToLzma();
                     break;
                 case Compression.XZ:
-                    cBuff = iBuff.ToXz();
+                    byte[] c = iBuff.ToXz();
+                    //Strip unneded junk out of the XZ stream
+                    cBuff = new byte[c.Length - 14];
+                    Buffer.BlockCopy(c, 7, cBuff, 0, cBuff.Length);
                     break;
                 case Compression.None:
                     cBuff = iBuff.ToArray();

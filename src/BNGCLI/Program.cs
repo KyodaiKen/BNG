@@ -139,7 +139,7 @@ namespace BNG_CLI {
                 Help.WriteLine("    lts=   (Default=Auto)             Layer tile size override      Auto or number between 32 to " + uint.MaxValue.ToString());
                 Help.WriteLine("    ltc=   (Default=0)                Enter 1 if you want to add this image as a layer to the current OPEN frame");
                 Help.WriteLine("    lcf=   (Default=0)                Enter 1 if you want this layer to close the current OPEN frame");
-                Help.WriteLine("    preset=(Default=9)                Compression effort preset.    (fastest) 1 ... 10 (slowest)");
+                Help.WriteLine("    preset=(Default=7)                Compression effort preset.    (fastest) 1 ... 10 (slowest)");
                 Help.WriteLine("    flt=   (Default=from preset)      Dot (.) separated list of compression pre-filters to try\n" +
                                "                                      Possible values:              { None, Sub, Up, Average, Median, Median2, Paeth, JXL_Pred }");
                 Help.WriteLine("    compr= (Default=from preset)      Dot (.) separated list of compression algorithms to try\n" +
@@ -437,7 +437,7 @@ namespace BNG_CLI {
                                         byte cpreset = 0;
                                         void prntPresetValError()
                                         {
-                                            Output.WriteLine("Error: Illegal number for preset Please enter an integer number between 0 and 11.");
+                                            Output.WriteLine("Error: Illegal number for preset Please enter an integer number between 0 and 10.");
                                         }
                                         if (!byte.TryParse(tuple[1], out cpreset))
                                         {
